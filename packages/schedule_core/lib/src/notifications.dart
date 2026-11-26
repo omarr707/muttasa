@@ -102,8 +102,9 @@ NotificationPlan planNotifications(
   for (final i in plan.items) {
     final kind = _kindFor(i);
     if (kind == null) continue;
-    if (i.status != ItemStatus.pending)
+    if (i.status != ItemStatus.pending) {
       continue; // لا تنبيه لمنجز أو مؤجل أو مستثنى.
+    }
     if (!s.notifyEnabled.contains(kind)) continue;
     final at = kind == NotifyKind.prayer ? i.start : i.start - s.leadMinutes;
     if (isToday && at <= now) continue;

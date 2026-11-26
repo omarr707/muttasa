@@ -617,8 +617,9 @@ class ScheduleEngine {
   bool _conflictPair(PlanItem a, PlanItem b) {
     // الصلاة داخل الدوام ليست تعارضًا: «مصلى العمل».
     final kinds = {a.kind, b.kind};
-    if (kinds.contains(ItemKind.prayer) && kinds.contains(ItemKind.work))
+    if (kinds.contains(ItemKind.prayer) && kinds.contains(ItemKind.work)) {
       return false;
+    }
     if (a.kind == ItemKind.work && b.kind == ItemKind.work) return false;
     return a.span.overlaps(b.span);
   }
@@ -735,8 +736,9 @@ class ScheduleEngine {
     for (final l in input.logs.values) {
       if (l.itemKey != r.key && !l.itemKey.startsWith('${r.key}#')) continue;
       if (!l.date.isBefore(d) &&
-          !(l.date == d && _sessionIndex(l.itemKey) < session))
+          !(l.date == d && _sessionIndex(l.itemKey) < session)) {
         continue;
+      }
       if (l.value2 != null && l.value2! > last) last = l.value2!;
     }
     return last + 1;
@@ -861,8 +863,9 @@ class ScheduleEngine {
     for (var i = 0; i < 7; i++) {
       for (final r in rulesOn(ws.add(i))) {
         if (r.config is FlexConfig &&
-            (r.config as FlexConfig).recurrence is TimesPerWeek)
+            (r.config as FlexConfig).recurrence is TimesPerWeek) {
           keys.add(r.key);
+        }
       }
     }
     for (final key in keys.toList()..sort()) {

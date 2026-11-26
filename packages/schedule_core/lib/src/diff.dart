@@ -55,8 +55,9 @@ List<DayDiff> previewChanges(
       }
     }
     for (final o in a.items) {
-      if (!newByKey.containsKey(o.key))
+      if (!newByKey.containsKey(o.key)) {
         changes.add(PlanChange(ChangeType.removed, o.title, from: o.start));
+      }
     }
     final oldUnplaced = a.unplaced.map((u) => u.key).toSet();
     for (final u in b.unplaced) {

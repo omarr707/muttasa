@@ -58,8 +58,9 @@ int? nearestFree(
         t,
         t + item.duration,
         ignoreKey: item.key,
-      ))
+      )) {
         return t;
+      }
     }
   }
   return null;
@@ -76,8 +77,9 @@ int? firstFreeAfter(
   final busy = [...plan.busy, ...?extra];
   final end = plan.bedtime.clamp(0, minutesPerDay);
   for (var t = ((after + 4) ~/ 5) * 5; t + duration <= end; t += 5) {
-    if (ScheduleEngine.isFree(busy, t, t + duration, ignoreKey: ignoreKey))
+    if (ScheduleEngine.isFree(busy, t, t + duration, ignoreKey: ignoreKey)) {
       return t;
+    }
   }
   return null;
 }
@@ -151,8 +153,9 @@ bool needsCarry(ScheduleEngine engine, PlanItem item, Day from) {
 String statusLabel(PlanItem i, {required bool isToday, required int now}) {
   switch (i.status) {
     case ItemStatus.done:
-      if (i.doneAt != null && (i.doneAt! - i.start).abs() > 20)
+      if (i.doneAt != null && (i.doneAt! - i.start).abs() > 20) {
         return 'نفّذتها ${fmtTime(i.doneAt!)}';
+      }
       return 'تمت';
     case ItemStatus.auto:
       return 'تُحسب تلقائيًا';
@@ -167,8 +170,9 @@ String statusLabel(PlanItem i, {required bool isToday, required int now}) {
     case ItemStatus.preJoin:
       return 'قبل انضمامك';
     case ItemStatus.pending:
-      if (isToday && i.end <= now && i.track != TrackMode.auto)
+      if (isToday && i.end <= now && i.track != TrackMode.auto) {
         return 'فات وقتها';
+      }
       if (isToday && i.start <= now && now < i.end) return 'الآن';
       return '';
   }
