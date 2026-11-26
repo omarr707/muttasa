@@ -1,0 +1,234 @@
+@Tags(['screens'])
+library;
+
+import 'dart:io';
+
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:muttasa/app.dart';
+import 'package:muttasa/data/database.dart';
+import 'package:muttasa/data/defaults.dart';
+import 'package:muttasa/data/library.dart';
+import 'package:muttasa/data/repository.dart';
+import 'package:muttasa/state/providers.dart';
+import 'package:schedule_core/schedule_core.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
+
+class FixedClock extends Clock {
+  @override
+  DateTime build() => DateTime(2026, 11, 26, 9, 40);
+
+  @override
+  void refresh() {}
+}
+
+Future<void> loadFonts() async {
+  Future<void> load(String family, List<String> files) async {
+    final loader = FontLoader(family);
+    for (final f in files) {
+      loader.addFont(
+        Future.value(ByteData.view(File(f).readAsBytesSync().buffer)),
+      );
+    }
+    await loader.load();
+  }
+
+  await load('IBMPlexSansArabic', [
+    for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold'])
+      'assets/fonts/IBMPlexSansArabic-$w.ttf',
+  ]);
+  await load('ReadexPro', ['assets/fonts/ReadexPro.ttf']);
+  // أيقونات Material من حزمة Flutter.
+  final sdk = File(
+    Platform.resolvedExecutable,
+  ).parent.parent.parent.parent.parent.parent.path;
+  final icons = File(
+    '$sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+  );
+  if (icons.existsSync()) await load('MaterialIcons', [icons.path]);
+}
+
+AppData sample() {
+  const from = Day(2026, 11, 1);
+  Rule lib(String key) => Rule(
+    id: key,
+    key: key,
+    validFrom: from,
+    config: libraryEntries.firstWhere((e) => e.key == key).build(),
+  );
+  const d = Day(2026, 11, 26);
+  return AppData(
+    profile: UserProfile(
+      name: 'عمر',
+      country: 'SA',
+      city: 'الرياض',
+      lat: 24.7136,
+      lng: 46.6753,
+      timezone: 'Asia/Riyadh',
+      joinedAt: DateTime(2026, 11, 1),
+    ),
+    rules: [
+      for (final k in [
+        'prayers',
+        'adhkar',
+        'quran:wird',
+        'meal:breakfast',
+        'meal:dinner',
+        'habit:walk',
+        'habit:read',
+        'reminders',
+      ])
+        lib(k),
+      Rule(
+        id: 'work',
+        key: 'work',
+        validFrom: from,
+        config: WorkConfig(
+          days: {
+            for (final wd in [7, 1, 2, 3, 4])
+              wd: [const WorkPeriod(450, 960, breakStart: 720, breakEnd: 750)],
+          },
+        ),
+      ),
+      const Rule(
+        id: 'kid',
+        key: 'kid:salma',
+        validFrom: from,
+        config: KidConfig(
+          child: 'سلمى',
+          place: 'المدرسة',
+          days: {
+            7: KidDay(drop: 400),
+            1: KidDay(drop: 400),
+            2: KidDay(drop: 400),
+            3: KidDay(drop: 400),
+            4: KidDay(drop: 400),
+          },
+        ),
+      ),
+    ],
+    logs: {
+      recordKey(d, 'prayer:fajr'): const ItemLog(
+        date: d,
+        itemKey: 'prayer:fajr',
+        status: ItemStatus.done,
+        plannedStart: 293,
+        doneAt: 295,
+      ),
+      recordKey(d, 'adhkar:morning'): const ItemLog(
+        date: d,
+        itemKey: 'adhkar:morning',
+        status: ItemStatus.done,
+        plannedStart: 315,
+        doneAt: 320,
+      ),
+      recordKey(d, 'water'): const ItemLog(
+        date: d,
+        itemKey: 'water',
+        status: ItemStatus.pending,
+        value: 2,
+      ),
+    },
+    meta: const {'lastClosed': '2026-11-25'},
+  );
+}
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  setUpAll(() async {
+    tzdata.initializeTimeZones();
+    await loadFonts();
+  });
+
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+  }) async {
+    tester.view.physicalSize = const Size(390 * 2, 844 * 2);
+    tester.view.devicePixelRatio = 2;
+    tester.platformDispatcher.platformBrightnessTestValue = brightness;
+    addTearDown(tester.view.reset);
+    final repo = Repository(AppDatabase.memory(), 'test');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          defaultsProvider.overrideWithValue(
+            Defaults.parse(
+              File('assets/defaults/config.json').readAsStringSync(),
+            ),
+          ),
+          initialDataProvider.overrideWithValue(sample()),
+          clockProvider.overrideWith(FixedClock.new),
+        ],
+        child: const MuttasaApp(notifications: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('يومي', (tester) async {
+    await pumpApp(tester);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/day_top.png'),
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/day_timeline.png'),
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/day_timeline2.png'),
+    );
+  });
+
+  testWidgets('يومي داكن', (tester) async {
+    await pumpApp(tester, brightness: Brightness.dark);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/day_dark.png'),
+    );
+  });
+
+  testWidgets('روتيني وأهدافي والإضافة', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('إضافة'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/add_sheet.png'),
+    );
+    await tester.tapAt(const Offset(200, 60));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/routine.png'),
+    );
+    await tester.tap(find.text('أهدافي'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/goals.png'),
+    );
+    await tester.tap(find.text('يومي'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الإحصائيات'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/stats.png'),
+    );
+  });
+}

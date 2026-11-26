@@ -1,0 +1,198 @@
+import 'package:schedule_core/schedule_core.dart';
+
+/// بطاقة في مكتبة الروتين: تُفعّل بنقرة وتُخصّص بـ ⚙.
+class LibraryEntry {
+  const LibraryEntry({
+    required this.key,
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.build,
+    this.islamOnly = false,
+    this.group = 'habits',
+  });
+  final String key;
+  final String title;
+  final String description;
+  final String icon;
+  final bool islamOnly;
+  final String group;
+  final RuleConfig Function() build;
+}
+
+final libraryEntries = <LibraryEntry>[
+  LibraryEntry(
+    key: 'prayers',
+    title: 'الصلوات',
+    description: 'حسب مواقيت مدينتك، والجمعة في وقتها',
+    icon: 'prayer',
+    islamOnly: true,
+    group: 'faith',
+    build: () => const PrayersConfig(),
+  ),
+  LibraryEntry(
+    key: 'adhkar',
+    title: 'أذكار الصباح والمساء',
+    description: 'بعد الفجر وبعد المغرب، 10 دقائق',
+    icon: 'sun',
+    islamOnly: true,
+    group: 'faith',
+    build: () => const AdhkarConfig(),
+  ),
+  LibraryEntry(
+    key: 'quran:wird',
+    title: 'ورد القرآن',
+    description: '4 صفحات كل يوم بعد الفجر',
+    icon: 'book',
+    islamOnly: true,
+    group: 'faith',
+    build: () => const FlexConfig(
+      kind: RuleKind.quran,
+      title: 'تلاوة القرآن',
+      icon: 'book',
+      duration: 10,
+      windows: [Window.afterFajr],
+      pages: 4,
+      book: 'المصحف',
+      startPage: 1,
+      category: 'quran',
+    ),
+  ),
+  LibraryEntry(
+    key: 'meal:breakfast',
+    title: 'الفطور',
+    description: '6:30 ص · 25 دقيقة',
+    icon: 'meal',
+    group: 'meals',
+    build: () => const FlexConfig(
+      kind: RuleKind.meal,
+      title: 'الفطور',
+      icon: 'meal',
+      duration: 25,
+      windows: [Window.morning],
+      preferred: 6 * 60 + 30,
+      category: 'meals',
+    ),
+  ),
+  LibraryEntry(
+    key: 'meal:lunch',
+    title: 'الغداء',
+    description: '1:30 م · 30 دقيقة',
+    icon: 'meal',
+    group: 'meals',
+    build: () => const FlexConfig(
+      kind: RuleKind.meal,
+      title: 'الغداء',
+      icon: 'meal',
+      duration: 30,
+      windows: [Window.any],
+      preferred: 13 * 60 + 30,
+      category: 'meals',
+    ),
+  ),
+  LibraryEntry(
+    key: 'meal:dinner',
+    title: 'العشاء',
+    description: '7:30 م · 30 دقيقة',
+    icon: 'meal',
+    group: 'meals',
+    build: () => const FlexConfig(
+      kind: RuleKind.meal,
+      title: 'العشاء',
+      icon: 'meal',
+      duration: 30,
+      windows: [Window.night],
+      preferred: 19 * 60 + 30,
+      category: 'meals',
+    ),
+  ),
+  LibraryEntry(
+    key: 'habit:walk',
+    title: 'المشي',
+    description: '3 مرات بالأسبوع · 30 دقيقة · العصر والمغرب',
+    icon: 'walk',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'المشي',
+      icon: 'walk',
+      duration: 30,
+      recurrence: TimesPerWeek(3),
+      windows: [Window.afternoon],
+      track: TrackMode.start,
+      optional: true,
+    ),
+  ),
+  LibraryEntry(
+    key: 'habit:read',
+    title: 'القراءة',
+    description: '4 مرات بالأسبوع · 25 دقيقة · الليل',
+    icon: 'book',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'القراءة',
+      icon: 'book',
+      duration: 25,
+      recurrence: TimesPerWeek(4),
+      windows: [Window.night],
+      optional: true,
+      pages: 20,
+      book: 'كتابك الحالي',
+      startPage: 1,
+    ),
+  ),
+  LibraryEntry(
+    key: 'habit:sport',
+    title: 'الرياضة',
+    description: '3 مرات بالأسبوع · 45 دقيقة',
+    icon: 'sport',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'الرياضة',
+      icon: 'sport',
+      duration: 45,
+      recurrence: TimesPerWeek(3),
+      windows: [Window.afternoon],
+      track: TrackMode.start,
+      optional: true,
+    ),
+  ),
+  LibraryEntry(
+    key: 'habit:freelance',
+    title: 'العمل الحر',
+    description: '3 جلسات بالأسبوع · 60 دقيقة · العصر والمغرب',
+    icon: 'laptop',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'العمل الحر',
+      icon: 'laptop',
+      duration: 60,
+      recurrence: TimesPerWeek(3),
+      windows: [Window.afternoon],
+      track: TrackMode.start,
+      optional: true,
+      category: 'freelance',
+    ),
+  ),
+  LibraryEntry(
+    key: 'habit:language',
+    title: 'تعلّم لغة',
+    description: 'كل يوم · 15 دقيقة',
+    icon: 'language',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'تعلّم لغة',
+      icon: 'language',
+      duration: 15,
+      windows: [Window.any],
+      optional: true,
+    ),
+  ),
+  LibraryEntry(
+    key: 'reminders',
+    title: 'تذكيرات قصيرة',
+    description: 'الماء مع الوجبات والاستراحة · الوقوف · التنفّس',
+    icon: 'water',
+    group: 'light',
+    build: () => const RemindersConfig(),
+  ),
+];
