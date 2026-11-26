@@ -1,0 +1,15 @@
+name: schedule_core
+description: محرك الجدولة لتطبيق مُتَّسَع. Dart خالصة بلا Flutter ولا قاعدة بيانات.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  adhan_dart: ^2.0.2
+  timezone: ^0.11.2
+
+dev_dependencies:
+  test: ^1.31.0
+  lints: ^6.0.0
