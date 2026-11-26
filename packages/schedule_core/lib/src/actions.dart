@@ -41,23 +41,43 @@ MoveCheck checkMove(DayPlan plan, PlanItem item, int newStart) {
 }
 
 /// أقرب وقت فاضٍ: بحث للأمام والخلف بخطوة 5 دقائق حتى 10 ساعات.
-int? nearestFree(DayPlan plan, PlanItem item, int around, {bool includeFlex = false}) {
-  final hard = plan.busy.where((b) => includeFlex || b.kind != BusyKind.flex).toList();
+int? nearestFree(
+  DayPlan plan,
+  PlanItem item,
+  int around, {
+  bool includeFlex = false,
+}) {
+  final hard = plan.busy
+      .where((b) => includeFlex || b.kind != BusyKind.flex)
+      .toList();
   final base = (around ~/ 5) * 5;
   for (var delta = 0; delta <= 600; delta += 5) {
     for (final t in [base + delta, base - delta]) {
-      if (ScheduleEngine.isFree(hard, t, t + item.duration, ignoreKey: item.key)) return t;
+      if (ScheduleEngine.isFree(
+        hard,
+        t,
+        t + item.duration,
+        ignoreKey: item.key,
+      ))
+        return t;
     }
   }
   return null;
 }
 
 /// أول فراغ بعد [after] حتى وقت النوم، مع احترام كل المحجوز.
-int? firstFreeAfter(DayPlan plan, int duration, int after, {String? ignoreKey, List<Busy>? extra}) {
+int? firstFreeAfter(
+  DayPlan plan,
+  int duration,
+  int after, {
+  String? ignoreKey,
+  List<Busy>? extra,
+}) {
   final busy = [...plan.busy, ...?extra];
   final end = plan.bedtime.clamp(0, minutesPerDay);
   for (var t = ((after + 4) ~/ 5) * 5; t + duration <= end; t += 5) {
-    if (ScheduleEngine.isFree(busy, t, t + duration, ignoreKey: ignoreKey)) return t;
+    if (ScheduleEngine.isFree(busy, t, t + duration, ignoreKey: ignoreKey))
+      return t;
   }
   return null;
 }
@@ -75,11 +95,18 @@ class RearrangeResult {
 }
 
 RearrangeResult rearrangeDay(DayPlan plan, int now) {
-  final late = plan.items
-      .where((i) =>
-          !i.fixed && i.status == ItemStatus.pending && i.start < now && i.log?.timerRunning != true && i.counted)
-      .toList()
-    ..sort((a, b) => a.start.compareTo(b.start));
+  final late =
+      plan.items
+          .where(
+            (i) =>
+                !i.fixed &&
+                i.status == ItemStatus.pending &&
+                i.start < now &&
+                i.log?.timerRunning != true &&
+                i.counted,
+          )
+          .toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
   final lateKeys = late.map((i) => i.key).toSet();
   final busy = plan.busy.where((b) => !lateKeys.contains(b.key)).toList();
   final moves = <String, int>{};
@@ -97,7 +124,14 @@ RearrangeResult rearrangeDay(DayPlan plan, int now) {
       failed.add(i);
     } else {
       moves[i.key] = found;
-      busy.add(Busy(Span(found, found + i.duration), BusyKind.flex, i.title, key: i.key));
+      busy.add(
+        Busy(
+          Span(found, found + i.duration),
+          BusyKind.flex,
+          i.title,
+          key: i.key,
+        ),
+      );
     }
   }
   return RearrangeResult(moves, failed);
@@ -117,7 +151,8 @@ bool needsCarry(ScheduleEngine engine, PlanItem item, Day from) {
 String statusLabel(PlanItem i, {required bool isToday, required int now}) {
   switch (i.status) {
     case ItemStatus.done:
-      if (i.doneAt != null && (i.doneAt! - i.start).abs() > 20) return 'نفّذتها ${fmtTime(i.doneAt!)}';
+      if (i.doneAt != null && (i.doneAt! - i.start).abs() > 20)
+        return 'نفّذتها ${fmtTime(i.doneAt!)}';
       return 'تمت';
     case ItemStatus.auto:
       return 'تُحسب تلقائيًا';
@@ -132,7 +167,8 @@ String statusLabel(PlanItem i, {required bool isToday, required int now}) {
     case ItemStatus.preJoin:
       return 'قبل انضمامك';
     case ItemStatus.pending:
-      if (isToday && i.end <= now && i.track != TrackMode.auto) return 'فات وقتها';
+      if (isToday && i.end <= now && i.track != TrackMode.auto)
+        return 'فات وقتها';
       if (isToday && i.start <= now && now < i.end) return 'الآن';
       return '';
   }

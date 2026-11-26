@@ -38,7 +38,8 @@ class Day implements Comparable<Day> {
   bool isAfter(Day o) => compareTo(o) > 0;
 
   /// وقت محلي عند الدقيقة [minute] من هذا اليوم.
-  DateTime at(int minute) => DateTime(year, month, day, minute ~/ 60, minute % 60);
+  DateTime at(int minute) =>
+      DateTime(year, month, day, minute ~/ 60, minute % 60);
 
   String get key =>
       '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
@@ -47,11 +48,15 @@ class Day implements Comparable<Day> {
   int compareTo(Day o) => year != o.year
       ? year - o.year
       : month != o.month
-          ? month - o.month
-          : day - o.day;
+      ? month - o.month
+      : day - o.day;
 
   @override
-  bool operator ==(Object other) => other is Day && other.year == year && other.month == month && other.day == day;
+  bool operator ==(Object other) =>
+      other is Day &&
+      other.year == year &&
+      other.month == month &&
+      other.day == day;
 
   @override
   int get hashCode => Object.hash(year, month, day);
@@ -70,7 +75,8 @@ class Span {
   bool overlapsRange(int s, int e) => start < e && s < end;
   bool contains(int m) => m >= start && m < end;
   @override
-  bool operator ==(Object other) => other is Span && other.start == start && other.end == end;
+  bool operator ==(Object other) =>
+      other is Span && other.start == start && other.end == end;
   @override
   int get hashCode => Object.hash(start, end);
   @override

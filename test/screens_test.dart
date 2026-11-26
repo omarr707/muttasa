@@ -71,8 +71,13 @@ AppData sample() {
       joinedAt: DateTime(2026, 11, 1),
     ),
     rules: [
+      const Rule(
+        id: 'prayers',
+        key: 'prayers',
+        validFrom: from,
+        config: PrayersConfig(sunnah: ['fajr', 'dhuhr', 'maghrib', 'isha']),
+      ),
       for (final k in [
-        'prayers',
         'adhkar',
         'quran:wird',
         'meal:breakfast',
@@ -202,7 +207,7 @@ void main() {
 
   testWidgets('روتيني وأهدافي والإضافة', (tester) async {
     await pumpApp(tester);
-    await tester.tap(find.text('إضافة'));
+    await tester.tap(find.byTooltip('إضافة'));
     await tester.pumpAndSettle();
     await expectLater(
       find.byType(MaterialApp),
@@ -216,6 +221,23 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/routine.png'),
     );
+    await tester.tap(find.text('الصلوات'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/routine_tap.png'),
+    );
+    final edit = find.text('عدّل');
+    if (edit.evaluate().isNotEmpty) {
+      await tester.tap(edit.first);
+      await tester.pumpAndSettle();
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/prayers_editor.png'),
+      );
+    }
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('أهدافي'));
     await tester.pumpAndSettle();
     await expectLater(

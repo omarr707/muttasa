@@ -32,7 +32,8 @@ class PlannedNotification {
   /// أزرار «تمت» و«أجّل ساعة» داخل التنبيه.
   final bool actionable;
 
-  DateTime get when => DateTime(date.year, date.month, date.day).add(Duration(minutes: minute));
+  DateTime get when =>
+      DateTime(date.year, date.month, date.day).add(Duration(minutes: minute));
 }
 
 class DroppedNotification {
@@ -88,7 +89,12 @@ bool _inQuiet(int minute, AppSettings s) {
 
 /// NotificationPlanner: يأخذ خطة اليوم والإعدادات ويرجع ما يُرسل وما أُسقط مع السبب.
 /// الأنواع بالأولوية: الصلاة، المواعيد، الروتين، الماء. الصلاة فوق القاعدتين.
-NotificationPlan planNotifications(DayPlan plan, AppSettings s, {required Day today, required int now}) {
+NotificationPlan planNotifications(
+  DayPlan plan,
+  AppSettings s, {
+  required Day today,
+  required int now,
+}) {
   final candidates = <PlannedNotification>[];
   final dropped = <DroppedNotification>[];
   final d = plan.date;
@@ -96,50 +102,64 @@ NotificationPlan planNotifications(DayPlan plan, AppSettings s, {required Day to
   for (final i in plan.items) {
     final kind = _kindFor(i);
     if (kind == null) continue;
-    if (i.status != ItemStatus.pending) continue; // لا تنبيه لمنجز أو مؤجل أو مستثنى.
+    if (i.status != ItemStatus.pending)
+      continue; // لا تنبيه لمنجز أو مؤجل أو مستثنى.
     if (!s.notifyEnabled.contains(kind)) continue;
     final at = kind == NotifyKind.prayer ? i.start : i.start - s.leadMinutes;
     if (isToday && at <= now) continue;
     final body = kind == NotifyKind.prayer
         ? 'حان وقت ${i.title.replaceFirst('صلاة ', '')} · ${fmtTime(i.start)}'
         : '${fmtRange(i.start, i.end)}${i.subtitle == null || i.subtitle!.isEmpty ? '' : ' · ${i.subtitle}'}';
-    candidates.add(PlannedNotification(
-      id: notificationId(d, i.key),
-      date: d,
-      minute: at,
-      kind: kind,
-      itemKey: i.key,
-      title: kind == NotifyKind.prayer ? i.title : (s.leadMinutes > 0 ? 'بعد ${s.leadMinutes} دقائق: ${i.title}' : i.title),
-      body: body,
-      actionable: i.track == TrackMode.confirm || i.track == TrackMode.autocount,
-    ));
+    candidates.add(
+      PlannedNotification(
+        id: notificationId(d, i.key),
+        date: d,
+        minute: at,
+        kind: kind,
+        itemKey: i.key,
+        title: kind == NotifyKind.prayer
+            ? i.title
+            : (s.leadMinutes > 0
+                  ? 'بعد ${s.leadMinutes} دقائق: ${i.title}'
+                  : i.title),
+        body: body,
+        actionable:
+            i.track == TrackMode.confirm || i.track == TrackMode.autocount,
+      ),
+    );
   }
   if (s.notifyEnabled.contains(NotifyKind.water)) {
-    for (final l in plan.lines.where((l) => l.kind == LineKind.water && !l.done)) {
+    for (final l in plan.lines.where(
+      (l) => l.kind == LineKind.water && !l.done,
+    )) {
       if (isToday && l.minute <= now) continue;
-      candidates.add(PlannedNotification(
-        id: notificationId(d, l.key),
-        date: d,
-        minute: l.minute,
-        kind: NotifyKind.water,
-        itemKey: l.key,
-        title: 'اشرب ماء',
-        body: 'كوب ماء الحين؟',
-      ));
+      candidates.add(
+        PlannedNotification(
+          id: notificationId(d, l.key),
+          date: d,
+          minute: l.minute,
+          kind: NotifyKind.water,
+          itemKey: l.key,
+          title: 'اشرب ماء',
+          body: 'كوب ماء الحين؟',
+        ),
+      );
     }
   }
   if (s.eveningReview && plan.bedtime < minutesPerDay) {
     final at = plan.bedtime - 30;
     if (!isToday || at > now) {
-      candidates.add(PlannedNotification(
-        id: notificationId(d, 'review'),
-        date: d,
-        minute: at,
-        kind: NotifyKind.routine,
-        itemKey: 'review',
-        title: 'راجع يومك',
-        body: 'سجّل اللي سويته قبل تنام',
-      ));
+      candidates.add(
+        PlannedNotification(
+          id: notificationId(d, 'review'),
+          date: d,
+          minute: at,
+          kind: NotifyKind.routine,
+          itemKey: 'review',
+          title: 'راجع يومك',
+          body: 'سجّل اللي سويته قبل تنام',
+        ),
+      );
     }
   }
 
@@ -153,10 +173,20 @@ NotificationPlan planNotifications(DayPlan plan, AppSettings s, {required Day to
     }
   }
   // الحد اليومي: الزائد يُسقط بحسب الأولوية ثم الوقت.
-  others.sort((a, b) => a.kind.index != b.kind.index ? a.kind.index - b.kind.index : a.minute - b.minute);
+  others.sort(
+    (a, b) => a.kind.index != b.kind.index
+        ? a.kind.index - b.kind.index
+        : a.minute - b.minute,
+  );
   final kept = others.take(s.dailyCap).toList();
   for (final c in others.skip(s.dailyCap)) {
-    dropped.add(DroppedNotification(c.title, c.minute, 'تجاوز الحد اليومي (${s.dailyCap})'));
+    dropped.add(
+      DroppedNotification(
+        c.title,
+        c.minute,
+        'تجاوز الحد اليومي (${s.dailyCap})',
+      ),
+    );
   }
   final send = [...prayers, ...kept]..sort((a, b) => a.minute - b.minute);
   dropped.sort((a, b) => a.minute - b.minute);

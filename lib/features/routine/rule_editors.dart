@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:schedule_core/schedule_core.dart';
 
 import '../../core/icons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../state/providers.dart';
 
 /// يفتح محرر القاعدة المناسب ويعيد الإعداد الجديد، أو null عند الإلغاء.
 Future<RuleConfig?> editRuleConfig(
@@ -712,16 +714,26 @@ class _FlexEditorState extends State<_FlexEditor> {
   }
 }
 
-class _PrayersEditor extends StatefulWidget {
+class _PrayersEditor extends ConsumerStatefulWidget {
   const _PrayersEditor({required this.initial});
   final PrayersConfig initial;
   @override
-  State<_PrayersEditor> createState() => _PrayersEditorState();
+  ConsumerState<_PrayersEditor> createState() => _PrayersEditorState();
 }
 
-class _PrayersEditorState extends State<_PrayersEditor> {
+class _PrayersEditorState extends ConsumerState<_PrayersEditor> {
   late final _place = TextEditingController(text: widget.initial.place);
   late TrackMode _track = widget.initial.track;
+  late final Set<String> _sunnah = widget.initial.sunnah.toSet();
+  static const _all = ['fajr', 'dhuhr', 'maghrib', 'isha', 'witr'];
+  static const _labels = {
+    'fajr': ('سنة الفجر', 'ركعتان قبل الصلاة'),
+    'dhuhr': ('سنة الظهر', 'أربع قبلها وركعتان بعدها، وسنة الجمعة يوم الجمعة'),
+    'maghrib': ('سنة المغرب', 'ركعتان بعد الصلاة'),
+    'isha': ('سنة العشاء', 'ركعتان بعد الصلاة'),
+    'witr': ('الوتر', 'داخل بطاقة العشاء'),
+  };
+
   @override
   void dispose() {
     _place.dispose();
@@ -729,32 +741,115 @@ class _PrayersEditorState extends State<_PrayersEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => _EditorScaffold(
-    title: 'الصلوات',
-    onSave: () => Navigator.pop(
-      context,
-      PrayersConfig(place: _place.text.trim(), track: _track),
-    ),
-    children: [
-      const FieldLabel('وين تصلي عادة؟ (اختياري)'),
-      TextField(controller: _place),
-      const FieldLabel('طريقة التسجيل'),
-      ChoiceChips<TrackMode>(
-        values: const [TrackMode.confirm, TrackMode.autocount],
-        label: (t) =>
-            t == TrackMode.confirm ? 'تأكيد سريع' : 'تُحسب ما لم أستثنها',
-        selected: (t) => t == _track,
-        onSelected: (t) => setState(() => _track = t),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Text(
-          'طريقة حساب المواقيت من الإعدادات ← الإسلام.',
-          style: TextStyle(color: context.c.muted, fontSize: 12.5),
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final today = ref.watch(todayProvider);
+    final pr = ref.watch(engineProvider).prayersFor(today);
+    final friday = today.weekday == DateTime.friday;
+    final times = [
+      ('الفجر', pr.fajr),
+      ('الشروق', pr.sunrise),
+      (friday ? 'الجمعة' : 'الظهر', pr.dhuhr),
+      ('العصر', pr.asr),
+      ('المغرب', pr.maghrib),
+      ('العشاء', pr.isha),
+    ];
+    return _EditorScaffold(
+      title: 'الصلوات',
+      onSave: () => Navigator.pop(
+        context,
+        PrayersConfig(
+          place: _place.text.trim(),
+          track: _track,
+          sunnah: [
+            for (final k in _all)
+              if (_sunnah.contains(k)) k,
+          ],
         ),
       ),
-    ],
-  );
+      children: [
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1.9,
+          children: [
+            for (final (n, m) in times)
+              Container(
+                decoration: BoxDecoration(
+                  color: c.bg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: c.line),
+                ),
+                alignment: Alignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(n, style: TextStyle(fontSize: 12, color: c.muted)),
+                    Text(
+                      fmtTime(m),
+                      style: const TextStyle(
+                        fontFamily: fontDisplay,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'مواقيت اليوم. طريقة الحساب والمدينة من الإعدادات ← الإسلام.',
+            style: TextStyle(color: c.muted, fontSize: 12.5),
+          ),
+        ),
+        const FieldLabel('السنن الرواتب'),
+        Text(
+          'تظهر داخل بطاقة الصلاة نفسها كبنود فرعية تأكدها منها، ولا تدخل في نسبة الإنجاز.',
+          style: TextStyle(color: c.ink2, fontSize: 13),
+        ),
+        const SizedBox(height: 6),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('فعّل السنن الرواتب'),
+          value: _sunnah.isNotEmpty,
+          onChanged: (v) => setState(() {
+            _sunnah.clear();
+            if (v) _sunnah.addAll(_all.where((k) => k != 'witr'));
+          }),
+        ),
+        if (_sunnah.isNotEmpty)
+          for (final k in _all)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(_labels[k]!.$1),
+              subtitle: Text(_labels[k]!.$2),
+              value: _sunnah.contains(k),
+              onChanged: (v) => setState(
+                () => v == true ? _sunnah.add(k) : _sunnah.remove(k),
+              ),
+            ),
+        const FieldLabel('وين تصلي عادة؟ (اختياري)'),
+        TextField(controller: _place),
+        const FieldLabel('طريقة التسجيل'),
+        ChoiceChips<TrackMode>(
+          values: const [TrackMode.confirm, TrackMode.autocount],
+          label: (t) =>
+              t == TrackMode.confirm ? 'تأكيد سريع' : 'تُحسب ما لم أستثنها',
+          selected: (t) => t == _track,
+          onSelected: (t) => setState(() => _track = t),
+        ),
+      ],
+    );
+  }
 }
 
 class _AdhkarEditor extends StatefulWidget {

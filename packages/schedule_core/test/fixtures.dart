@@ -9,7 +9,8 @@ void initTz() {
   _tzReady = true;
 }
 
-UserProfile riyadh({DateTime? joinedAt, int wake = 270, int sleep = 1350}) => UserProfile(
+UserProfile riyadh({DateTime? joinedAt, int wake = 270, int sleep = 1350}) =>
+    UserProfile(
       name: 'عمر',
       country: 'SA',
       city: 'الرياض',
@@ -22,18 +23,23 @@ UserProfile riyadh({DateTime? joinedAt, int wake = 270, int sleep = 1350}) => Us
     );
 
 UserProfile cairo() => UserProfile(
-      name: 'عمر',
-      country: 'EG',
-      city: 'القاهرة',
-      lat: 30.0444,
-      lng: 31.2357,
-      timezone: 'Africa/Cairo',
-      calcMethod: CalcMethod.egyptian,
-      joinedAt: DateTime(2026, 1, 1),
-    );
+  name: 'عمر',
+  country: 'EG',
+  city: 'القاهرة',
+  lat: 30.0444,
+  lng: 31.2357,
+  timezone: 'Africa/Cairo',
+  calcMethod: CalcMethod.egyptian,
+  joinedAt: DateTime(2026, 1, 1),
+);
 
-Rule rule(String key, RuleConfig c, {Day? from, Day? to}) =>
-    Rule(id: '$key-${from?.key ?? 'base'}', key: key, validFrom: from ?? const Day(2026, 1, 1), validTo: to, config: c);
+Rule rule(String key, RuleConfig c, {Day? from, Day? to}) => Rule(
+  id: '$key-${from?.key ?? 'base'}',
+  key: key,
+  validFrom: from ?? const Day(2026, 1, 1),
+  validTo: to,
+  config: c,
+);
 
 final basicRules = <Rule>[
   rule('prayers', const PrayersConfig()),
@@ -79,12 +85,23 @@ final basicRules = <Rule>[
   rule('reminders', const RemindersConfig()),
 ];
 
-WorkConfig morningWork({int start = 450, int end = 960, int? bs = 720, int? be = 750}) => WorkConfig(
-      days: {
-        for (final d in [DateTime.sunday, DateTime.monday, DateTime.tuesday, DateTime.wednesday, DateTime.thursday])
-          d: [WorkPeriod(start, end, breakStart: bs, breakEnd: be)],
-      },
-    );
+WorkConfig morningWork({
+  int start = 450,
+  int end = 960,
+  int? bs = 720,
+  int? be = 750,
+}) => WorkConfig(
+  days: {
+    for (final d in [
+      DateTime.sunday,
+      DateTime.monday,
+      DateTime.tuesday,
+      DateTime.wednesday,
+      DateTime.thursday,
+    ])
+      d: [WorkPeriod(start, end, breakStart: bs, breakEnd: be)],
+  },
+);
 
 EngineInput input({
   UserProfile? profile,

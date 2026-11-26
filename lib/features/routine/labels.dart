@@ -38,8 +38,11 @@ String ruleIcon(RuleConfig c) => switch (c) {
 
 String ruleSummary(RuleConfig c, {String city = ''}) {
   switch (c) {
-    case PrayersConfig():
-      return 'حسب مواقيت $city · الجمعة في وقتها';
+    case PrayersConfig(:final sunnah):
+      return [
+        'حسب مواقيت $city',
+        if (sunnah.isNotEmpty) 'مع السنن الرواتب' else 'الجمعة في وقتها',
+      ].join(' · ');
     case AdhkarConfig(:final morning, :final evening, :final minutes):
       final parts = [if (morning) 'الصباح', if (evening) 'المساء'];
       return '${parts.join(' و')} · $minutes دقائق';

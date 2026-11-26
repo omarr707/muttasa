@@ -70,33 +70,39 @@ class OneOff {
   String get itemKey => 'once:$id';
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'title': title,
-        'date': date.key,
-        'start': start,
-        'duration': duration,
-        'window': window.name,
-        'habitKey': habitKey,
-        'note': note,
-      };
+    'id': id,
+    'kind': kind.name,
+    'title': title,
+    'date': date.key,
+    'start': start,
+    'duration': duration,
+    'window': window.name,
+    'habitKey': habitKey,
+    'note': note,
+  };
 
   factory OneOff.fromJson(Map<String, Object?> j) => OneOff(
-        id: j['id']! as String,
-        kind: OneOffKind.values.byName(j['kind']! as String),
-        title: j['title']! as String,
-        date: Day.parse(j['date']! as String),
-        start: j['start'] as int?,
-        duration: (j['duration'] as int?) ?? 30,
-        window: Window.values.byName((j['window'] as String?) ?? 'any'),
-        habitKey: j['habitKey'] as String?,
-        note: j['note'] as String?,
-      );
+    id: j['id']! as String,
+    kind: OneOffKind.values.byName(j['kind']! as String),
+    title: j['title']! as String,
+    date: Day.parse(j['date']! as String),
+    start: j['start'] as int?,
+    duration: (j['duration'] as int?) ?? 30,
+    window: Window.values.byName((j['window'] as String?) ?? 'any'),
+    habitKey: j['habitKey'] as String?,
+    note: j['note'] as String?,
+  );
 }
 
 /// «هذه المرة فقط»: تعديل على (date, itemKey).
 class DayOverride {
-  const DayOverride({required this.date, required this.itemKey, this.start, this.off = false, this.reason});
+  const DayOverride({
+    required this.date,
+    required this.itemKey,
+    this.start,
+    this.off = false,
+    this.reason,
+  });
   final Day date;
   final String itemKey;
 
@@ -107,15 +113,20 @@ class DayOverride {
   final bool off;
   final String? reason;
 
-  Map<String, Object?> toJson() =>
-      {'date': date.key, 'itemKey': itemKey, 'start': start, 'off': off, 'reason': reason};
+  Map<String, Object?> toJson() => {
+    'date': date.key,
+    'itemKey': itemKey,
+    'start': start,
+    'off': off,
+    'reason': reason,
+  };
   factory DayOverride.fromJson(Map<String, Object?> j) => DayOverride(
-        date: Day.parse(j['date']! as String),
-        itemKey: j['itemKey']! as String,
-        start: j['start'] as int?,
-        off: (j['off'] as bool?) ?? false,
-        reason: j['reason'] as String?,
-      );
+    date: Day.parse(j['date']! as String),
+    itemKey: j['itemKey']! as String,
+    start: j['start'] as int?,
+    off: (j['off'] as bool?) ?? false,
+    reason: j['reason'] as String?,
+  );
 }
 
 /// عنصر مؤجل إلى يوم آخر.
@@ -142,25 +153,25 @@ class CarryOver {
   String get newKey => 'carry:${fromDate.key}:$itemKey';
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'fromDate': fromDate.key,
-        'itemKey': itemKey,
-        'title': title,
-        'duration': duration,
-        'toDate': toDate.key,
-        'start': start,
-        'counted': counted,
-      };
+    'id': id,
+    'fromDate': fromDate.key,
+    'itemKey': itemKey,
+    'title': title,
+    'duration': duration,
+    'toDate': toDate.key,
+    'start': start,
+    'counted': counted,
+  };
   factory CarryOver.fromJson(Map<String, Object?> j) => CarryOver(
-        id: j['id']! as String,
-        fromDate: Day.parse(j['fromDate']! as String),
-        itemKey: j['itemKey']! as String,
-        title: j['title']! as String,
-        duration: j['duration']! as int,
-        toDate: Day.parse(j['toDate']! as String),
-        start: j['start'] as int?,
-        counted: (j['counted'] as bool?) ?? true,
-      );
+    id: j['id']! as String,
+    fromDate: Day.parse(j['fromDate']! as String),
+    itemKey: j['itemKey']! as String,
+    title: j['title']! as String,
+    duration: j['duration']! as int,
+    toDate: Day.parse(j['toDate']! as String),
+    start: j['start'] as int?,
+    counted: (j['counted'] as bool?) ?? true,
+  );
 }
 
 /// سجل ما تم فعلًا لعنصر في يوم (Occurrence). مفتاحه (date, itemKey)
@@ -224,54 +235,53 @@ class ItemLog {
     int? timerAccumSeconds,
     String? category,
     String? title,
-  }) =>
-      ItemLog(
-        date: date,
-        itemKey: itemKey,
-        status: status ?? this.status,
-        plannedStart: plannedStart ?? this.plannedStart,
-        plannedEnd: plannedEnd ?? this.plannedEnd,
-        doneAt: clearDoneAt ? null : (doneAt ?? this.doneAt),
-        actualSeconds: actualSeconds ?? this.actualSeconds,
-        value: value ?? this.value,
-        value2: value2 ?? this.value2,
-        timerStartedAt: clearTimer ? null : (timerStartedAt ?? this.timerStartedAt),
-        timerAccumSeconds: timerAccumSeconds ?? this.timerAccumSeconds,
-        category: category ?? this.category,
-        title: title ?? this.title,
-      );
+  }) => ItemLog(
+    date: date,
+    itemKey: itemKey,
+    status: status ?? this.status,
+    plannedStart: plannedStart ?? this.plannedStart,
+    plannedEnd: plannedEnd ?? this.plannedEnd,
+    doneAt: clearDoneAt ? null : (doneAt ?? this.doneAt),
+    actualSeconds: actualSeconds ?? this.actualSeconds,
+    value: value ?? this.value,
+    value2: value2 ?? this.value2,
+    timerStartedAt: clearTimer ? null : (timerStartedAt ?? this.timerStartedAt),
+    timerAccumSeconds: timerAccumSeconds ?? this.timerAccumSeconds,
+    category: category ?? this.category,
+    title: title ?? this.title,
+  );
 
   Map<String, Object?> toJson() => {
-        'date': date.key,
-        'itemKey': itemKey,
-        'status': status.name,
-        'plannedStart': plannedStart,
-        'plannedEnd': plannedEnd,
-        'doneAt': doneAt,
-        'actualSeconds': actualSeconds,
-        'value': value,
-        'value2': value2,
-        'timerStartedAt': timerStartedAt,
-        'timerAccumSeconds': timerAccumSeconds,
-        'category': category,
-        'title': title,
-      };
+    'date': date.key,
+    'itemKey': itemKey,
+    'status': status.name,
+    'plannedStart': plannedStart,
+    'plannedEnd': plannedEnd,
+    'doneAt': doneAt,
+    'actualSeconds': actualSeconds,
+    'value': value,
+    'value2': value2,
+    'timerStartedAt': timerStartedAt,
+    'timerAccumSeconds': timerAccumSeconds,
+    'category': category,
+    'title': title,
+  };
 
   factory ItemLog.fromJson(Map<String, Object?> j) => ItemLog(
-        date: Day.parse(j['date']! as String),
-        itemKey: j['itemKey']! as String,
-        status: ItemStatus.values.byName(j['status']! as String),
-        plannedStart: j['plannedStart'] as int?,
-        plannedEnd: j['plannedEnd'] as int?,
-        doneAt: j['doneAt'] as int?,
-        actualSeconds: j['actualSeconds'] as int?,
-        value: j['value'] as int?,
-        value2: j['value2'] as int?,
-        timerStartedAt: j['timerStartedAt'] as int?,
-        timerAccumSeconds: (j['timerAccumSeconds'] as int?) ?? 0,
-        category: j['category'] as String?,
-        title: j['title'] as String?,
-      );
+    date: Day.parse(j['date']! as String),
+    itemKey: j['itemKey']! as String,
+    status: ItemStatus.values.byName(j['status']! as String),
+    plannedStart: j['plannedStart'] as int?,
+    plannedEnd: j['plannedEnd'] as int?,
+    doneAt: j['doneAt'] as int?,
+    actualSeconds: j['actualSeconds'] as int?,
+    value: j['value'] as int?,
+    value2: j['value2'] as int?,
+    timerStartedAt: j['timerStartedAt'] as int?,
+    timerAccumSeconds: (j['timerAccumSeconds'] as int?) ?? 0,
+    category: j['category'] as String?,
+    title: j['title'] as String?,
+  );
 }
 
 /// مفتاح (date, itemKey) للخرائط.

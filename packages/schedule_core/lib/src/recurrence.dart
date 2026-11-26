@@ -36,9 +36,15 @@ class Weekdays extends Recurrence {
   const Weekdays(this.days);
   final Set<int> days;
   @override
-  Map<String, Object?> toJson() => {'type': 'weekdays', 'days': (days.toList()..sort())};
+  Map<String, Object?> toJson() => {
+    'type': 'weekdays',
+    'days': (days.toList()..sort()),
+  };
   @override
-  bool operator ==(Object other) => other is Weekdays && other.days.length == days.length && other.days.containsAll(days);
+  bool operator ==(Object other) =>
+      other is Weekdays &&
+      other.days.length == days.length &&
+      other.days.containsAll(days);
   @override
   int get hashCode => Object.hashAllUnordered(days);
 }

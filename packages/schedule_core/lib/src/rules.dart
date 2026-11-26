@@ -31,7 +31,17 @@ enum TrackMode {
   quick,
 }
 
-enum RuleKind { prayers, adhkar, quran, habit, meal, work, kid, klass, reminders }
+enum RuleKind {
+  prayers,
+  adhkar,
+  quran,
+  habit,
+  meal,
+  work,
+  kid,
+  klass,
+  reminders,
+}
 
 /// قاعدة مؤرّخة. «من اليوم فصاعدًا» يغلق الصف القديم ويفتح صفًا جديدًا
 /// بنفس [key]، فالأيام السابقة تُولّد بقواعدها الأصلية.
@@ -64,10 +74,13 @@ class Rule {
 
   RuleKind get kind => config.kind;
 
-  bool activeOn(Day d) => !d.isBefore(validFrom) && (validTo == null || !d.isAfter(validTo!));
+  bool activeOn(Day d) =>
+      !d.isBefore(validFrom) && (validTo == null || !d.isAfter(validTo!));
 
   bool pausedOn(Day d) =>
-      pausedFrom != null && !d.isBefore(pausedFrom!) && (pausedUntil == null || !d.isAfter(pausedUntil!));
+      pausedFrom != null &&
+      !d.isBefore(pausedFrom!) &&
+      (pausedUntil == null || !d.isAfter(pausedUntil!));
 
   Rule copyWith({
     String? id,
@@ -78,36 +91,39 @@ class Rule {
     Day? pausedUntil,
     bool clearPause = false,
     RuleConfig? config,
-  }) =>
-      Rule(
-        id: id ?? this.id,
-        key: key,
-        validFrom: validFrom ?? this.validFrom,
-        validTo: clearValidTo ? null : (validTo ?? this.validTo),
-        pausedFrom: clearPause ? null : (pausedFrom ?? this.pausedFrom),
-        pausedUntil: clearPause ? null : (pausedUntil ?? this.pausedUntil),
-        config: config ?? this.config,
-      );
+  }) => Rule(
+    id: id ?? this.id,
+    key: key,
+    validFrom: validFrom ?? this.validFrom,
+    validTo: clearValidTo ? null : (validTo ?? this.validTo),
+    pausedFrom: clearPause ? null : (pausedFrom ?? this.pausedFrom),
+    pausedUntil: clearPause ? null : (pausedUntil ?? this.pausedUntil),
+    config: config ?? this.config,
+  );
 
   Map<String, Object?> toJson() => {
-        'id': id,
-        'key': key,
-        'validFrom': validFrom.key,
-        'validTo': validTo?.key,
-        'pausedFrom': pausedFrom?.key,
-        'pausedUntil': pausedUntil?.key,
-        'config': config.toJson(),
-      };
+    'id': id,
+    'key': key,
+    'validFrom': validFrom.key,
+    'validTo': validTo?.key,
+    'pausedFrom': pausedFrom?.key,
+    'pausedUntil': pausedUntil?.key,
+    'config': config.toJson(),
+  };
 
   factory Rule.fromJson(Map<String, Object?> j) => Rule(
-        id: j['id']! as String,
-        key: j['key']! as String,
-        validFrom: Day.parse(j['validFrom']! as String),
-        validTo: j['validTo'] == null ? null : Day.parse(j['validTo']! as String),
-        pausedFrom: j['pausedFrom'] == null ? null : Day.parse(j['pausedFrom']! as String),
-        pausedUntil: j['pausedUntil'] == null ? null : Day.parse(j['pausedUntil']! as String),
-        config: RuleConfig.fromJson((j['config']! as Map).cast<String, Object?>()),
-      );
+    id: j['id']! as String,
+    key: j['key']! as String,
+    validFrom: Day.parse(j['validFrom']! as String),
+    validTo: j['validTo'] == null ? null : Day.parse(j['validTo']! as String),
+    pausedFrom: j['pausedFrom'] == null
+        ? null
+        : Day.parse(j['pausedFrom']! as String),
+    pausedUntil: j['pausedUntil'] == null
+        ? null
+        : Day.parse(j['pausedUntil']! as String),
+    config: RuleConfig.fromJson((j['config']! as Map).cast<String, Object?>()),
+  );
 }
 
 sealed class RuleConfig {
@@ -140,34 +156,76 @@ sealed class RuleConfig {
 
 /// الصلوات الخمس (والجمعة). الأوقات من السياق.
 class PrayersConfig extends RuleConfig {
-  const PrayersConfig({this.place = 'في المسجد القريب', this.track = TrackMode.confirm});
+  const PrayersConfig({
+    this.place = 'في المسجد القريب',
+    this.track = TrackMode.confirm,
+    this.sunnah = const [],
+  });
   final String place;
   final TrackMode track;
+
+  /// السنن الرواتب المفعّلة: fajr, dhuhr, maghrib, isha, witr.
+  final List<String> sunnah;
   @override
   RuleKind get kind => RuleKind.prayers;
+  PrayersConfig copyWith({
+    String? place,
+    TrackMode? track,
+    List<String>? sunnah,
+  }) => PrayersConfig(
+    place: place ?? this.place,
+    track: track ?? this.track,
+    sunnah: sunnah ?? this.sunnah,
+  );
   @override
-  Map<String, Object?> toJson() => {'kind': kind.name, 'place': place, 'track': track.name};
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'place': place,
+    'track': track.name,
+    if (sunnah.isNotEmpty) 'sunnah': sunnah,
+  };
   factory PrayersConfig.fromJson(Map<String, Object?> j) => PrayersConfig(
-        place: (j['place'] as String?) ?? '',
-        track: TrackMode.values.byName((j['track'] as String?) ?? 'confirm'),
-      );
+    place: (j['place'] as String?) ?? '',
+    track: TrackMode.values.byName((j['track'] as String?) ?? 'confirm'),
+    sunnah: ((j['sunnah'] as List?) ?? const []).cast<String>().toList(),
+  );
 }
 
+/// السنن الرواتب لكل صلاة: (المعرّف، العنوان، التفصيل).
+const sunnahOf = <String, List<(String, String, String)>>{
+  'fajr': [('fajr', 'سنة الفجر', 'ركعتان قبل الصلاة')],
+  'dhuhr': [
+    ('dhuhr_before', 'سنة الظهر القبلية', 'أربع ركعات'),
+    ('dhuhr_after', 'سنة الظهر البعدية', 'ركعتان'),
+  ],
+  'maghrib': [('maghrib', 'سنة المغرب', 'ركعتان بعد الصلاة')],
+  'isha': [('isha', 'سنة العشاء', 'ركعتان بعد الصلاة')],
+  'witr': [('witr', 'الوتر', 'ركعة أو أكثر قبل النوم')],
+};
+
 class AdhkarConfig extends RuleConfig {
-  const AdhkarConfig({this.morning = true, this.evening = true, this.minutes = 10});
+  const AdhkarConfig({
+    this.morning = true,
+    this.evening = true,
+    this.minutes = 10,
+  });
   final bool morning;
   final bool evening;
   final int minutes;
   @override
   RuleKind get kind => RuleKind.adhkar;
   @override
-  Map<String, Object?> toJson() =>
-      {'kind': kind.name, 'morning': morning, 'evening': evening, 'minutes': minutes};
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'morning': morning,
+    'evening': evening,
+    'minutes': minutes,
+  };
   factory AdhkarConfig.fromJson(Map<String, Object?> j) => AdhkarConfig(
-        morning: (j['morning'] as bool?) ?? true,
-        evening: (j['evening'] as bool?) ?? true,
-        minutes: (j['minutes'] as int?) ?? 10,
-      );
+    morning: (j['morning'] as bool?) ?? true,
+    evening: (j['evening'] as bool?) ?? true,
+    minutes: (j['minutes'] as int?) ?? 10,
+  );
 }
 
 /// عنصر مرن: عادة، ورد قرآن، وجبة.
@@ -219,7 +277,9 @@ class FlexConfig extends RuleConfig {
   final String? book;
   final int? startPage;
 
-  Window windowFor(int session) => windows.isEmpty ? Window.any : windows[session.clamp(0, windows.length - 1)];
+  Window windowFor(int session) => windows.isEmpty
+      ? Window.any
+      : windows[session.clamp(0, windows.length - 1)];
 
   FlexConfig copyWith({
     String? title,
@@ -237,64 +297,67 @@ class FlexConfig extends RuleConfig {
     int? pages,
     String? book,
     int? startPage,
-  }) =>
-      FlexConfig(
-        kind: kind,
-        title: title ?? this.title,
-        subtitle: subtitle ?? this.subtitle,
-        icon: icon ?? this.icon,
-        recurrence: recurrence ?? this.recurrence,
-        duration: duration ?? this.duration,
-        windows: windows ?? this.windows,
-        preferred: clearPreferred ? null : (preferred ?? this.preferred),
-        perDay: perDay ?? this.perDay,
-        track: track ?? this.track,
-        optional: optional ?? this.optional,
-        counted: counted ?? this.counted,
-        category: category,
-        pages: pages ?? this.pages,
-        book: book ?? this.book,
-        startPage: startPage ?? this.startPage,
-      );
+  }) => FlexConfig(
+    kind: kind,
+    title: title ?? this.title,
+    subtitle: subtitle ?? this.subtitle,
+    icon: icon ?? this.icon,
+    recurrence: recurrence ?? this.recurrence,
+    duration: duration ?? this.duration,
+    windows: windows ?? this.windows,
+    preferred: clearPreferred ? null : (preferred ?? this.preferred),
+    perDay: perDay ?? this.perDay,
+    track: track ?? this.track,
+    optional: optional ?? this.optional,
+    counted: counted ?? this.counted,
+    category: category,
+    pages: pages ?? this.pages,
+    book: book ?? this.book,
+    startPage: startPage ?? this.startPage,
+  );
 
   @override
   Map<String, Object?> toJson() => {
-        'kind': kind.name,
-        'title': title,
-        'subtitle': subtitle,
-        'icon': icon,
-        'recurrence': recurrence.toJson(),
-        'duration': duration,
-        'windows': windows.map((w) => w.name).toList(),
-        'preferred': preferred,
-        'perDay': perDay,
-        'track': track.name,
-        'optional': optional,
-        'counted': counted,
-        'category': category,
-        'pages': pages,
-        'book': book,
-        'startPage': startPage,
-      };
+    'kind': kind.name,
+    'title': title,
+    'subtitle': subtitle,
+    'icon': icon,
+    'recurrence': recurrence.toJson(),
+    'duration': duration,
+    'windows': windows.map((w) => w.name).toList(),
+    'preferred': preferred,
+    'perDay': perDay,
+    'track': track.name,
+    'optional': optional,
+    'counted': counted,
+    'category': category,
+    'pages': pages,
+    'book': book,
+    'startPage': startPage,
+  };
 
   factory FlexConfig.fromJson(Map<String, Object?> j) => FlexConfig(
-        kind: RuleKind.values.byName(j['kind']! as String),
-        title: j['title']! as String,
-        subtitle: j['subtitle'] as String?,
-        icon: (j['icon'] as String?) ?? 'star',
-        recurrence: Recurrence.fromJson((j['recurrence']! as Map).cast<String, Object?>()),
-        duration: j['duration']! as int,
-        windows: ((j['windows'] as List?) ?? const ['any']).map((w) => Window.values.byName(w as String)).toList(),
-        preferred: j['preferred'] as int?,
-        perDay: (j['perDay'] as int?) ?? 1,
-        track: TrackMode.values.byName((j['track'] as String?) ?? 'confirm'),
-        optional: (j['optional'] as bool?) ?? false,
-        counted: (j['counted'] as bool?) ?? true,
-        category: (j['category'] as String?) ?? 'habits',
-        pages: j['pages'] as int?,
-        book: j['book'] as String?,
-        startPage: j['startPage'] as int?,
-      );
+    kind: RuleKind.values.byName(j['kind']! as String),
+    title: j['title']! as String,
+    subtitle: j['subtitle'] as String?,
+    icon: (j['icon'] as String?) ?? 'star',
+    recurrence: Recurrence.fromJson(
+      (j['recurrence']! as Map).cast<String, Object?>(),
+    ),
+    duration: j['duration']! as int,
+    windows: ((j['windows'] as List?) ?? const ['any'])
+        .map((w) => Window.values.byName(w as String))
+        .toList(),
+    preferred: j['preferred'] as int?,
+    perDay: (j['perDay'] as int?) ?? 1,
+    track: TrackMode.values.byName((j['track'] as String?) ?? 'confirm'),
+    optional: (j['optional'] as bool?) ?? false,
+    counted: (j['counted'] as bool?) ?? true,
+    category: (j['category'] as String?) ?? 'habits',
+    pages: j['pages'] as int?,
+    book: j['book'] as String?,
+    startPage: j['startPage'] as int?,
+  );
 }
 
 /// فترة دوام. النهاية قبل البداية = وردية تعبر منتصف الليل.
@@ -307,15 +370,21 @@ class WorkPeriod {
   final int? breakEnd;
 
   bool get crossesMidnight => end <= start;
-  bool get hasBreak => breakStart != null && breakEnd != null && breakEnd! > breakStart!;
+  bool get hasBreak =>
+      breakStart != null && breakEnd != null && breakEnd! > breakStart!;
 
-  Map<String, Object?> toJson() => {'start': start, 'end': end, 'breakStart': breakStart, 'breakEnd': breakEnd};
+  Map<String, Object?> toJson() => {
+    'start': start,
+    'end': end,
+    'breakStart': breakStart,
+    'breakEnd': breakEnd,
+  };
   factory WorkPeriod.fromJson(Map<String, Object?> j) => WorkPeriod(
-        j['start']! as int,
-        j['end']! as int,
-        breakStart: j['breakStart'] as int?,
-        breakEnd: j['breakEnd'] as int?,
-      );
+    j['start']! as int,
+    j['end']! as int,
+    breakStart: j['breakStart'] as int?,
+    breakEnd: j['breakEnd'] as int?,
+  );
 }
 
 enum WorkPattern {
@@ -329,7 +398,11 @@ enum WorkPattern {
 }
 
 class WorkConfig extends RuleConfig {
-  const WorkConfig({this.title = 'الدوام', this.pattern = WorkPattern.morning, required this.days});
+  const WorkConfig({
+    this.title = 'الدوام',
+    this.pattern = WorkPattern.morning,
+    required this.days,
+  });
   final String title;
   final WorkPattern pattern;
 
@@ -341,22 +414,25 @@ class WorkConfig extends RuleConfig {
 
   @override
   Map<String, Object?> toJson() => {
-        'kind': kind.name,
-        'title': title,
-        'pattern': pattern.name,
-        'days': {for (final e in days.entries) '${e.key}': e.value.map((p) => p.toJson()).toList()},
-      };
+    'kind': kind.name,
+    'title': title,
+    'pattern': pattern.name,
+    'days': {
+      for (final e in days.entries)
+        '${e.key}': e.value.map((p) => p.toJson()).toList(),
+    },
+  };
 
   factory WorkConfig.fromJson(Map<String, Object?> j) => WorkConfig(
-        title: (j['title'] as String?) ?? 'الدوام',
-        pattern: WorkPattern.values.byName((j['pattern'] as String?) ?? 'custom'),
-        days: {
-          for (final e in ((j['days'] as Map?) ?? const {}).entries)
-            int.parse(e.key as String): (e.value as List)
-                .map((p) => WorkPeriod.fromJson((p as Map).cast<String, Object?>()))
-                .toList(),
-        },
-      );
+    title: (j['title'] as String?) ?? 'الدوام',
+    pattern: WorkPattern.values.byName((j['pattern'] as String?) ?? 'custom'),
+    days: {
+      for (final e in ((j['days'] as Map?) ?? const {}).entries)
+        int.parse(e.key as String): (e.value as List)
+            .map((p) => WorkPeriod.fromJson((p as Map).cast<String, Object?>()))
+            .toList(),
+    },
+  );
 }
 
 /// مواعيد يوم واحد للطفل: توصيل و/أو استلام.
@@ -365,11 +441,17 @@ class KidDay {
   final int? drop;
   final int? pick;
   Map<String, Object?> toJson() => {'drop': drop, 'pick': pick};
-  factory KidDay.fromJson(Map<String, Object?> j) => KidDay(drop: j['drop'] as int?, pick: j['pick'] as int?);
+  factory KidDay.fromJson(Map<String, Object?> j) =>
+      KidDay(drop: j['drop'] as int?, pick: j['pick'] as int?);
 }
 
 class KidConfig extends RuleConfig {
-  const KidConfig({required this.child, this.place, this.trip = 20, required this.days});
+  const KidConfig({
+    required this.child,
+    this.place,
+    this.trip = 20,
+    required this.days,
+  });
   final String child;
   final String? place;
 
@@ -381,21 +463,23 @@ class KidConfig extends RuleConfig {
   RuleKind get kind => RuleKind.kid;
   @override
   Map<String, Object?> toJson() => {
-        'kind': kind.name,
-        'child': child,
-        'place': place,
-        'trip': trip,
-        'days': {for (final e in days.entries) '${e.key}': e.value.toJson()},
-      };
+    'kind': kind.name,
+    'child': child,
+    'place': place,
+    'trip': trip,
+    'days': {for (final e in days.entries) '${e.key}': e.value.toJson()},
+  };
   factory KidConfig.fromJson(Map<String, Object?> j) => KidConfig(
-        child: j['child']! as String,
-        place: j['place'] as String?,
-        trip: (j['trip'] as int?) ?? 20,
-        days: {
-          for (final e in ((j['days'] as Map?) ?? const {}).entries)
-            int.parse(e.key as String): KidDay.fromJson((e.value as Map).cast<String, Object?>()),
-        },
-      );
+    child: j['child']! as String,
+    place: j['place'] as String?,
+    trip: (j['trip'] as int?) ?? 20,
+    days: {
+      for (final e in ((j['days'] as Map?) ?? const {}).entries)
+        int.parse(e.key as String): KidDay.fromJson(
+          (e.value as Map).cast<String, Object?>(),
+        ),
+    },
+  );
 }
 
 /// حصة أو نادٍ أو دورة بموعد أسبوعي.
@@ -419,27 +503,32 @@ class ClassConfig extends RuleConfig {
   RuleKind get kind => RuleKind.klass;
   @override
   Map<String, Object?> toJson() => {
-        'kind': kind.name,
-        'title': title,
-        'who': who,
-        'weekdays': (weekdays.toList()..sort()),
-        'start': start,
-        'end': end,
-        'place': place,
-      };
+    'kind': kind.name,
+    'title': title,
+    'who': who,
+    'weekdays': (weekdays.toList()..sort()),
+    'start': start,
+    'end': end,
+    'place': place,
+  };
   factory ClassConfig.fromJson(Map<String, Object?> j) => ClassConfig(
-        title: j['title']! as String,
-        who: (j['who'] as String?) ?? 'أنا',
-        weekdays: {...(j['weekdays']! as List).cast<int>()},
-        start: j['start']! as int,
-        end: j['end']! as int,
-        place: j['place'] as String?,
-      );
+    title: j['title']! as String,
+    who: (j['who'] as String?) ?? 'أنا',
+    weekdays: {...(j['weekdays']! as List).cast<int>()},
+    start: j['start']! as int,
+    end: j['end']! as int,
+    place: j['place'] as String?,
+  );
 }
 
 /// التذكيرات القصيرة: خطوط خفيفة لا تحجز وقتًا ولا تُحسب.
 class RemindersConfig extends RuleConfig {
-  const RemindersConfig({this.water = true, this.cups = 8, this.stand = true, this.breathe = true});
+  const RemindersConfig({
+    this.water = true,
+    this.cups = 8,
+    this.stand = true,
+    this.breathe = true,
+  });
   final bool water;
   final int cups;
   final bool stand;
@@ -447,12 +536,17 @@ class RemindersConfig extends RuleConfig {
   @override
   RuleKind get kind => RuleKind.reminders;
   @override
-  Map<String, Object?> toJson() =>
-      {'kind': kind.name, 'water': water, 'cups': cups, 'stand': stand, 'breathe': breathe};
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'water': water,
+    'cups': cups,
+    'stand': stand,
+    'breathe': breathe,
+  };
   factory RemindersConfig.fromJson(Map<String, Object?> j) => RemindersConfig(
-        water: (j['water'] as bool?) ?? true,
-        cups: (j['cups'] as int?) ?? 8,
-        stand: (j['stand'] as bool?) ?? true,
-        breathe: (j['breathe'] as bool?) ?? true,
-      );
+    water: (j['water'] as bool?) ?? true,
+    cups: (j['cups'] as int?) ?? 8,
+    stand: (j['stand'] as bool?) ?? true,
+    breathe: (j['breathe'] as bool?) ?? true,
+  );
 }

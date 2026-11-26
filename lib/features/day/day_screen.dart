@@ -40,28 +40,66 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     final profile = ref.watch(appDataProvider.select((d) => d.profile))!;
     final todayProgress = dayProgress(todayPlan);
 
+    final isToday = date == today;
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _tab == _Tab.stats
+          ? null
+          : _Fabs(
+              onAdd: () => showAddSheet(context, ref, date),
+              onRearrange: isToday
+                  ? () => rearrangeFlow(context, ref, date, plan)
+                  : null,
+            ),
       body: SafeArea(
         bottom: false,
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                padding: const EdgeInsetsDirectional.fromSTEB(16, 6, 4, 0),
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_month_outlined, color: c.accent2),
+                    Icon(
+                      Icons.calendar_month_outlined,
+                      color: c.accent2,
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'مُتَّسَع',
-                      style: TextStyle(
-                        fontFamily: fontDisplay,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'مُتَّسَع',
+                            style: TextStyle(
+                              fontFamily: fontDisplay,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 18,
+                              height: 1.25,
+                            ),
+                          ),
+                          Text(
+                            [
+                              fmtDayLong(date),
+                              if (profile.islam)
+                                hijriLabel(
+                                  date,
+                                  offset: profile.hijriOffset,
+                                  short: true,
+                                ),
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: c.muted),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    _MiniRing(progress: todayProgress),
+                    _MiniRing(
+                      progress: todayProgress,
+                      onTap: () => setState(() => _tab = _Tab.stats),
+                    ),
                     IconButton(
                       tooltip: 'الإعدادات',
                       onPressed: () => context.push('/settings'),
@@ -77,11 +115,29 @@ class _DayScreenState extends ConsumerState<DayScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Segmented<_Tab>(
-                  values: _Tab.values,
-                  labels: const ['الجدول الزمني', 'الإحصائيات'],
-                  selected: _tab,
-                  onChanged: (t) => setState(() => _tab = t),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: c.line)),
+                  ),
+                  child: Row(
+                    children: [
+                      UnderlineTabs<_Tab>(
+                        values: _Tab.values,
+                        labels: const ['الجدول الزمني', 'الإحصائيات'],
+                        selected: _tab,
+                        onChanged: (t) => setState(() => _tab = t),
+                      ),
+                      const Spacer(),
+                      if (_tab == _Tab.timeline)
+                        Segmented<_Filter>(
+                          small: true,
+                          values: _Filter.values,
+                          labels: const ['الكل', 'المنجزة'],
+                          selected: _filter,
+                          onChanged: (f) => setState(() => _filter = f),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -89,27 +145,10 @@ class _DayScreenState extends ConsumerState<DayScreen> {
               SliverToBoxAdapter(child: StatsView(date: date))
             else ...[
               SliverToBoxAdapter(
-                child: _Header(
-                  date: date,
-                  plan: plan,
-                  engine: engine,
-                  hijriOffset: profile.hijriOffset,
-                  islam: profile.islam,
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: _Actions(
-                  date: date,
-                  plan: plan,
-                  filter: _filter,
-                  onFilter: (f) => setState(() => _filter = f),
-                ),
-              ),
-              SliverToBoxAdapter(
                 child: _Banners(date: date, plan: plan, today: today),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 16, 8),
+                padding: const EdgeInsets.fromLTRB(8, 6, 16, 8),
                 sliver: SliverList.list(
                   children: _timeline(context, plan, date, today),
                 ),
@@ -119,7 +158,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                   child: Column(
                     children: [
-                      if (date == today) _SleepCard(plan: plan),
+                      if (isToday) _SleepCard(plan: plan),
                       const SizedBox(height: 12),
                       PillButton(
                         label: 'عرض اليوم التالي · ${fmtDayLong(date.next)}',
@@ -300,12 +339,13 @@ class _DayScreenState extends ConsumerState<DayScreen> {
 }
 
 class _MiniRing extends StatelessWidget {
-  const _MiniRing({required this.progress});
+  const _MiniRing({required this.progress, this.onTap});
   final Progress progress;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    return Container(
+    final child = Container(
       padding: const EdgeInsetsDirectional.fromSTEB(6, 4, 12, 4),
       decoration: BoxDecoration(
         color: c.card,
@@ -326,6 +366,11 @@ class _MiniRing extends StatelessWidget {
           ),
         ],
       ),
+    );
+    return Semantics(
+      button: true,
+      label: 'إنجاز اليوم ${progress.done} من ${progress.total}',
+      child: GestureDetector(onTap: onTap, child: child),
     );
   }
 }
@@ -374,8 +419,11 @@ class _WeekStrip extends ConsumerWidget {
                               margin: const EdgeInsets.symmetric(horizontal: 2),
                               padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
-                                color: on ? c.accent : Colors.transparent,
+                                color: on ? c.accent : c.card,
                                 borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: on ? c.accent : c.line,
+                                ),
                               ),
                               child: Column(
                                 children: [
@@ -443,232 +491,144 @@ class _WeekStrip extends ConsumerWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.date,
-    required this.plan,
-    required this.engine,
-    required this.hijriOffset,
-    required this.islam,
-  });
-  final Day date;
-  final DayPlan plan;
-  final ScheduleEngine engine;
-  final int hijriOffset;
-  final bool islam;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.c;
-    final p = dayProgress(plan);
-    final w = weekProgress(engine, date);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
-      child: Column(
-        children: [
-          Text(
-            fmtDayLong(date),
-            style: const TextStyle(
-              fontFamily: fontDisplay,
-              fontWeight: FontWeight.w700,
-              fontSize: 22,
-            ),
-          ),
-          if (islam)
-            Text(
-              hijriLabel(date, offset: hijriOffset),
-              style: TextStyle(color: c.muted, fontSize: 13),
-            ),
-          const SizedBox(height: 14),
-          Semantics(
-            label: 'إنجاز اليوم ${p.done} من ${p.total}',
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                ProgressRing(
-                  progress: p.ratio,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        fmtCount(p.done, p.total),
-                        style: const TextStyle(
-                          fontFamily: fontDisplay,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 21,
-                        ),
-                      ),
-                      Text(
-                        'إنجاز اليوم',
-                        style: TextStyle(fontSize: 11.5, color: c.muted),
-                      ),
-                    ],
+/// «رتّب يومي»: ينقل المتأخر إلى أقرب وقت فاضي بعد الآن.
+Future<void> rearrangeFlow(
+  BuildContext context,
+  WidgetRef ref,
+  Day date,
+  DayPlan plan,
+) async {
+  final now = ref.read(nowMinuteProvider);
+  final r = rearrangeDay(plan, now);
+  if (r.moves.isEmpty && r.failed.isEmpty) {
+    toast(context, 'يومك مرتب. ما فيه شي متأخر.');
+    return;
+  }
+  final ctrl = ref.read(appDataProvider.notifier);
+  await ctrl.applyRearrange(date, r.moves);
+  if (!context.mounted) return;
+  if (r.failed.isEmpty) {
+    toast(
+      context,
+      'رتّبنا ${r.moves.length} مهام بعد الآن',
+      actionLabel: 'تراجع',
+      onAction: () async {
+        for (final k in r.moves.keys) {
+          await ctrl.clearOverride(date, k);
+        }
+      },
+    );
+  } else {
+    await showModalBottomSheet<void>(
+      useRootNavigator: true,
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'رتّبنا ${r.moves.length}، وهذي ما لقت وقت اليوم',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+              ),
+              for (final i in r.failed)
+                ListTile(
+                  title: Text(i.title),
+                  trailing: PillButton(
+                    label: 'أجّل',
+                    dense: true,
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      showPostponeSheet(context, ref, i, date);
+                    },
                   ),
                 ),
-                PositionedDirectional(
-                  bottom: 2,
-                  end: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.pill,
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: c.bg, width: 3),
-                    ),
-                    child: Text(
-                      '${p.percent}%',
-                      style: TextStyle(
-                        color: c.pillInk,
-                        fontSize: 12,
-                        fontFamily: fontDisplay,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: 'الأسبوع: ',
-                  style: TextStyle(color: c.muted),
-                ),
-                TextSpan(
-                  text: fmtCount(w.done, w.total),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _Actions extends ConsumerWidget {
-  const _Actions({
-    required this.date,
-    required this.plan,
-    required this.filter,
-    required this.onFilter,
-  });
-  final Day date;
-  final DayPlan plan;
-  final _Filter filter;
-  final ValueChanged<_Filter> onFilter;
+class _Fabs extends StatelessWidget {
+  const _Fabs({required this.onAdd, required this.onRearrange});
+  final VoidCallback onAdd;
+  final VoidCallback? onRearrange;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final today = ref.watch(todayProvider);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: PillButton(
-                  label: 'إضافة',
-                  icon: Icons.add,
-                  expand: true,
-                  onPressed: () => showAddSheet(context, ref, date),
+  Widget _circle(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required double size,
+    required bool primary,
+    required VoidCallback onTap,
+  }) {
+    final c = context.c;
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: primary ? c.pill : c.bg,
+              shape: BoxShape.circle,
+              border: primary ? null : Border.all(color: c.line),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x2E0F1A33),
+                  blurRadius: 14,
+                  offset: Offset(0, 4),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: PillButton(
-                  label: 'رتّب يومي',
-                  icon: Icons.shuffle,
-                  soft: true,
-                  expand: true,
-                  onPressed: date != today
-                      ? null
-                      : () => _rearrange(context, ref),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: Segmented<_Filter>(
-              small: true,
-              values: _Filter.values,
-              labels: const ['كل المهام', 'المنجزة'],
-              selected: filter,
-              onChanged: onFilter,
+              ],
+            ),
+            child: Icon(
+              icon,
+              color: primary ? c.pillInk : c.ink,
+              size: size * .46,
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Future<void> _rearrange(BuildContext context, WidgetRef ref) async {
-    final now = ref.read(nowMinuteProvider);
-    final r = rearrangeDay(plan, now);
-    if (r.moves.isEmpty && r.failed.isEmpty) {
-      toast(context, 'يومك مرتب. ما فيه شي متأخر.');
-      return;
-    }
-    final ctrl = ref.read(appDataProvider.notifier);
-    await ctrl.applyRearrange(date, r.moves);
-    if (!context.mounted) return;
-    if (r.failed.isEmpty) {
-      toast(
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      _circle(
         context,
-        'رتّبنا ${r.moves.length} مهام بعد الآن',
-        actionLabel: 'تراجع',
-        onAction: () async {
-          for (final k in r.moves.keys) {
-            await ctrl.clearOverride(date, k);
-          }
-        },
-      );
-    } else {
-      await showModalBottomSheet<void>(
-        useRootNavigator: true,
-        context: context,
-        builder: (ctx) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'رتّبنا ${r.moves.length}، وهذي ما لقت وقت اليوم',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
-                  ),
-                ),
-                for (final i in r.failed)
-                  ListTile(
-                    title: Text(i.title),
-                    trailing: PillButton(
-                      label: 'أجّل',
-                      dense: true,
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        showPostponeSheet(context, ref, i, date);
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
+        label: 'إضافة',
+        icon: Icons.add,
+        size: 58,
+        primary: true,
+        onTap: onAdd,
+      ),
+      if (onRearrange != null) ...[
+        const SizedBox(width: 14),
+        _circle(
+          context,
+          label: 'رتّب يومي',
+          icon: Icons.shuffle,
+          size: 46,
+          primary: false,
+          onTap: onRearrange!,
         ),
-      );
-    }
-  }
+      ],
+    ],
+  );
 }
 
 class _Banners extends ConsumerWidget {

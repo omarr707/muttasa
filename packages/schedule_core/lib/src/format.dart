@@ -69,12 +69,23 @@ const arabicWeekdayLetters = {
 };
 
 const arabicMonths = [
-  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
 ];
 
 /// «الخميس 26 نوفمبر».
-String fmtDayLong(Day d) => '${arabicWeekdays[d.weekday]} ${d.day} ${arabicMonths[d.month - 1]}';
+String fmtDayLong(Day d) =>
+    '${arabicWeekdays[d.weekday]} ${d.day} ${arabicMonths[d.month - 1]}';
 
 /// قائمة أيام الأسبوع بترتيب يبدأ بالسبت.
 const weekOrder = [

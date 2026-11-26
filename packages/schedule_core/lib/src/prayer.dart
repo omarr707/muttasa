@@ -33,20 +33,26 @@ class DayPrayers {
   );
 
   @override
-  String toString() => 'fajr=$fajr dhuhr=$dhuhr asr=$asr maghrib=$maghrib isha=$isha';
+  String toString() =>
+      'fajr=$fajr dhuhr=$dhuhr asr=$asr maghrib=$maghrib isha=$isha';
 }
 
 /// يحسب المواقيت محليًا بمكتبة adhan من الإحداثيات والتاريخ وطريقة الحساب.
 /// يخبّئ النتائج بمفتاح (التاريخ، الموقع، الطريقة).
 class PrayerCalculator {
-  PrayerCalculator({required this.lat, required this.lng, required this.method, required this.location});
+  PrayerCalculator({
+    required this.lat,
+    required this.lng,
+    required this.method,
+    required this.location,
+  });
 
   factory PrayerCalculator.forProfile(UserProfile p) => PrayerCalculator(
-        lat: p.lat,
-        lng: p.lng,
-        method: p.calcMethod,
-        location: tz.getLocation(p.timezone),
-      );
+    lat: p.lat,
+    lng: p.lng,
+    method: p.calcMethod,
+    location: tz.getLocation(p.timezone),
+  );
 
   final double lat;
   final double lng;
@@ -72,24 +78,24 @@ class PrayerCalculator {
   }
 
   DayPrayers forDay(Day d) => _cache.putIfAbsent(d, () {
-        final pt = adhan.PrayerTimes(
-          date: DateTime(d.year, d.month, d.day),
-          coordinates: adhan.Coordinates(lat, lng),
-          calculationParameters: _params(),
-        );
-        int m(DateTime utc) {
-          final local = tz.TZDateTime.from(utc, location);
-          final dayOffset = Day(local.year, local.month, local.day).difference(d);
-          return dayOffset * minutesPerDay + local.hour * 60 + local.minute;
-        }
+    final pt = adhan.PrayerTimes(
+      date: DateTime(d.year, d.month, d.day),
+      coordinates: adhan.Coordinates(lat, lng),
+      calculationParameters: _params(),
+    );
+    int m(DateTime utc) {
+      final local = tz.TZDateTime.from(utc, location);
+      final dayOffset = Day(local.year, local.month, local.day).difference(d);
+      return dayOffset * minutesPerDay + local.hour * 60 + local.minute;
+    }
 
-        return DayPrayers(
-          fajr: m(pt.fajr),
-          sunrise: m(pt.sunrise),
-          dhuhr: m(pt.dhuhr),
-          asr: m(pt.asr),
-          maghrib: m(pt.maghrib),
-          isha: m(pt.isha),
-        );
-      });
+    return DayPrayers(
+      fajr: m(pt.fajr),
+      sunrise: m(pt.sunrise),
+      dhuhr: m(pt.dhuhr),
+      asr: m(pt.asr),
+      maghrib: m(pt.maghrib),
+      isha: m(pt.isha),
+    );
+  });
 }

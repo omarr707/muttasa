@@ -20,6 +20,11 @@ class MColors extends ThemeExtension<MColors> {
     required this.pillInk,
     required this.good,
     required this.warn,
+    required this.doneBg,
+    required this.doneInk,
+    required this.amber,
+    required this.amberBg,
+    required this.amberLine,
   });
 
   final Color bg,
@@ -37,7 +42,12 @@ class MColors extends ThemeExtension<MColors> {
       pill,
       pillInk,
       good,
-      warn;
+      warn,
+      doneBg,
+      doneInk,
+      amber,
+      amberBg,
+      amberLine;
 
   static const light = MColors(
     bg: Color(0xFFFFFFFF),
@@ -56,6 +66,11 @@ class MColors extends ThemeExtension<MColors> {
     pillInk: Color(0xFFFFFFFF),
     good: Color(0xFF3A9D57),
     warn: Color(0xFFC7792B),
+    doneBg: Color(0xFFF3F4F6),
+    doneInk: Color(0xFF6B7280),
+    amber: Color(0xFFA8640F),
+    amberBg: Color(0xFFFDF3E3),
+    amberLine: Color(0xFFF1D3A4),
   );
 
   static const dark = MColors(
@@ -75,6 +90,11 @@ class MColors extends ThemeExtension<MColors> {
     pillInk: Color(0xFF0E0F12),
     good: Color(0xFF5CC27A),
     warn: Color(0xFFE0A160),
+    doneBg: Color(0xFF161A21),
+    doneInk: Color(0xFF9AA3B2),
+    amber: Color(0xFFF0B462),
+    amberBg: Color(0xFF2A2216),
+    amberLine: Color(0xFF5A4526),
   );
 
   @override

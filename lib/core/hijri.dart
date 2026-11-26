@@ -17,8 +17,9 @@ const _hijriMonths = [
 ];
 
 /// التاريخ الهجري (أم القرى) مع إزاحة ±1 يوم، بأرقام لاتينية: «16 جمادى الآخرة 1448 هـ».
-String hijriLabel(Day d, {int offset = 0}) {
+String hijriLabel(Day d, {int offset = 0, bool short = false}) {
   final dt = DateTime(d.year, d.month, d.day).add(Duration(days: offset));
   final h = HijriCalendar.fromDate(dt);
+  if (short) return '${h.hDay} ${_hijriMonths[h.hMonth - 1]}';
   return '${h.hDay} ${_hijriMonths[h.hMonth - 1]} ${h.hYear} هـ';
 }

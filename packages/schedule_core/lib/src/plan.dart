@@ -4,7 +4,19 @@ import 'records.dart';
 import 'rules.dart';
 
 /// نوع العنصر المولّد، يحدد شكل البطاقة وإجراءها.
-enum ItemKind { prayer, adhkar, quran, habit, meal, work, kid, klass, task, period, event }
+enum ItemKind {
+  prayer,
+  adhkar,
+  quran,
+  habit,
+  meal,
+  work,
+  kid,
+  klass,
+  task,
+  period,
+  event,
+}
 
 /// عنصر واحد في خطة اليوم.
 class PlanItem {
@@ -35,6 +47,7 @@ class PlanItem {
     this.oneOffId,
     this.window,
     this.log,
+    this.subs = const [],
   });
 
   /// المفتاح الثابت (date, itemKey) مثل habit:read#2 أو prayer:fajr.
@@ -73,6 +86,9 @@ class PlanItem {
   final Window? window;
   final ItemLog? log;
 
+  /// بنود فرعية داخل البطاقة (السنن الرواتب). لا تدخل في نسبة الإنجاز.
+  final List<SubItem> subs;
+
   int get duration => end - start;
   Span get span => Span(start, end);
 
@@ -87,51 +103,80 @@ class PlanItem {
   /// يدخل في مقام الإنجاز؟
   bool get inDenominator {
     if (!counted) return false;
-    if (status == ItemStatus.skipped || status == ItemStatus.postponed || status == ItemStatus.preJoin) {
+    if (status == ItemStatus.skipped ||
+        status == ItemStatus.postponed ||
+        status == ItemStatus.preJoin) {
       return false;
     }
     if (isExtra && !isDoneLike) return false;
     return true;
   }
 
-  PlanItem copyWith({int? start, int? end, ItemStatus? status, bool? manual, ItemLog? log}) => PlanItem(
-        key: key,
-        ruleKey: ruleKey,
-        kind: kind,
-        title: title,
-        subtitle: subtitle,
-        icon: icon,
-        start: start ?? this.start,
-        end: end ?? this.end,
-        fixed: fixed,
-        counted: counted,
-        optional: optional,
-        track: track,
-        status: status ?? this.status,
-        doneAt: doneAt,
-        category: category,
-        isExtra: isExtra,
-        manual: manual ?? this.manual,
-        outsideWindow: outsideWindow,
-        workBreak: workBreak,
-        pagesFrom: pagesFrom,
-        pagesTo: pagesTo,
-        book: book,
-        carriedFrom: carriedFrom,
-        oneOffId: oneOffId,
-        window: window,
-        log: log ?? this.log,
-      );
+  PlanItem copyWith({
+    int? start,
+    int? end,
+    ItemStatus? status,
+    bool? manual,
+    ItemLog? log,
+  }) => PlanItem(
+    key: key,
+    ruleKey: ruleKey,
+    kind: kind,
+    title: title,
+    subtitle: subtitle,
+    icon: icon,
+    start: start ?? this.start,
+    end: end ?? this.end,
+    fixed: fixed,
+    counted: counted,
+    optional: optional,
+    track: track,
+    status: status ?? this.status,
+    doneAt: doneAt,
+    category: category,
+    isExtra: isExtra,
+    manual: manual ?? this.manual,
+    outsideWindow: outsideWindow,
+    workBreak: workBreak,
+    pagesFrom: pagesFrom,
+    pagesTo: pagesTo,
+    book: book,
+    carriedFrom: carriedFrom,
+    oneOffId: oneOffId,
+    window: window,
+    log: log ?? this.log,
+    subs: subs,
+  );
 
   @override
   String toString() => '$key[$start-$end ${status.name}]';
+}
+
+/// بند فرعي يُسجَّل بمفتاحه الخاص.
+class SubItem {
+  const SubItem({
+    required this.key,
+    required this.title,
+    required this.detail,
+    this.done = false,
+  });
+  final String key;
+  final String title;
+  final String detail;
+  final bool done;
 }
 
 enum LineKind { water, stand, breathe, custom, sleep }
 
 /// الخطوط الخفيفة: لا تحجز وقتًا ولا تُحسب.
 class ReminderLine {
-  const ReminderLine({required this.key, required this.kind, required this.minute, required this.title, this.done = false});
+  const ReminderLine({
+    required this.key,
+    required this.kind,
+    required this.minute,
+    required this.title,
+    this.done = false,
+  });
   final String key;
   final LineKind kind;
   final int minute;
@@ -155,7 +200,13 @@ enum UnplacedReason {
 }
 
 class Unplaced {
-  const Unplaced(this.key, this.title, this.reason, {this.ruleKey, this.duration = 0});
+  const Unplaced(
+    this.key,
+    this.title,
+    this.reason, {
+    this.ruleKey,
+    this.duration = 0,
+  });
   final String key;
   final String title;
   final UnplacedReason reason;

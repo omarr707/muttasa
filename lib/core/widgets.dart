@@ -176,6 +176,62 @@ class PrimaryButton extends StatelessWidget {
 }
 
 /// مفتاح تبديل كبسولي (الجدول الزمني | الإحصائيات).
+/// تبويبات بخط سفلي، مثل «الجدول الزمني | الإحصائيات» في النموذج.
+class UnderlineTabs<T> extends StatelessWidget {
+  const UnderlineTabs({
+    super.key,
+    required this.values,
+    required this.labels,
+    required this.selected,
+    required this.onChanged,
+  });
+  final List<T> values;
+  final List<String> labels;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < values.length; i++) ...[
+          if (i > 0) const SizedBox(width: 18),
+          Semantics(
+            selected: values[i] == selected,
+            button: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onChanged(values[i]),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(2, 8, 2, 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      width: 2.5,
+                      color: values[i] == selected ? c.ink : Colors.transparent,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    fontFamily: fontDisplay,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: values[i] == selected ? c.ink : c.muted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class Segmented<T> extends StatelessWidget {
   const Segmented({
     super.key,
@@ -195,7 +251,7 @@ class Segmented<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(small ? 3 : 4),
       decoration: BoxDecoration(
         color: c.card,
         borderRadius: BorderRadius.circular(999),
@@ -215,8 +271,8 @@ class Segmented<T> extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     padding: EdgeInsets.symmetric(
-                      vertical: small ? 6 : 9,
-                      horizontal: small ? 14 : 6,
+                      vertical: small ? 4 : 7,
+                      horizontal: small ? 12 : 6,
                     ),
                     decoration: BoxDecoration(
                       color: values[i] == selected

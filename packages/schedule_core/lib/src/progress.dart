@@ -81,7 +81,9 @@ HabitWeek habitWeek(ScheduleEngine engine, Rule rule, Day anyDay) {
         doneDays.add(plan.date);
       }
     }
-    unplaced += plan.unplaced.where((u) => u.ruleKey == rule.key && mine(u.key)).length;
+    unplaced += plan.unplaced
+        .where((u) => u.ruleKey == rule.key && mine(u.key))
+        .length;
   }
   return HabitWeek(
     rule: rule,
@@ -94,8 +96,9 @@ HabitWeek habitWeek(ScheduleEngine engine, Rule rule, Day anyDay) {
 }
 
 /// ما لم يُسجّل أمس: شريط «أمس فيه N ما سجلتها».
-List<PlanItem> unloggedItems(DayPlan plan) =>
-    plan.items.where((i) => i.counted && i.status == ItemStatus.missed).toList();
+List<PlanItem> unloggedItems(DayPlan plan) => plan.items
+    .where((i) => i.counted && i.status == ItemStatus.missed)
+    .toList();
 
 /// الإنجاز حسب الفئة للإحصائيات.
 Map<String, Progress> progressByCategory(Iterable<DayPlan> plans) {
@@ -103,7 +106,9 @@ Map<String, Progress> progressByCategory(Iterable<DayPlan> plans) {
   for (final p in plans) {
     for (final i in p.items) {
       if (!i.inDenominator) continue;
-      out[i.category] = (out[i.category] ?? Progress.zero) + Progress(i.isDoneLike ? 1 : 0, 1);
+      out[i.category] =
+          (out[i.category] ?? Progress.zero) +
+          Progress(i.isDoneLike ? 1 : 0, 1);
     }
   }
   return out;
