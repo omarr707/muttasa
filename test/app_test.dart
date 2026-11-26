@@ -137,7 +137,7 @@ void main() {
     await tester.tap(find.text('لاحقًا'));
     await tester.pumpAndSettle();
 
-    expect(find.text('إنجاز اليوم'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^إنجاز اليوم')), findsOneWidget);
     expect(find.text('يومي'), findsOneWidget);
     final data = await repo.loadAll();
     expect(data.profile!.city, 'الرياض');
