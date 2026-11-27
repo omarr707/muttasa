@@ -20,3 +20,5 @@ export 'src/notifications.dart';
 export 'src/diff.dart';
 export 'src/goals.dart';
 export 'src/report.dart';
+export 'src/season.dart';
+export 'src/partner.dart';

@@ -60,6 +60,7 @@ int notificationId(Day date, String itemKey) {
 }
 
 NotifyKind? _kindFor(PlanItem i) {
+  if (i.partner) return null; // مشوار الشريك للعلم فقط.
   switch (i.kind) {
     case ItemKind.prayer:
       return NotifyKind.prayer;

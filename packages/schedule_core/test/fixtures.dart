@@ -113,10 +113,16 @@ EngineInput input({
   List<OneOff> oneOffs = const [],
   List<CarryOver> carries = const [],
   AppSettings settings = const AppSettings(),
+  List<LifeMode> modes = const [],
+  List<Holiday> holidays = const [],
+  PartnerShare partner = const PartnerShare(),
+  List<ImportedEvent> imported = const [],
+  List<Person> people = const [],
+  ContactsConfig contacts = const ContactsConfig(),
 }) {
   initTz();
   final p = profile ?? riyadh();
-  final calc = PrayerCalculator.forProfile(p);
+  final calc = TravelAwarePrayers(p, modes);
   return EngineInput(
     profile: p,
     settings: settings,
@@ -125,6 +131,12 @@ EngineInput input({
     overrides: overrides,
     carries: carries,
     logs: logs,
+    modes: modes,
+    holidays: holidays,
+    partner: partner,
+    imported: imported,
+    people: people,
+    contacts: contacts,
     prayers: calc.forDay,
     today: today,
     nowMinute: now,
