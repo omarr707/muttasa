@@ -206,6 +206,7 @@ bool isMovable(PlanItem i) =>
       ItemKind.klass,
     }.contains(i.kind) &&
     !i.partner &&
+    i.category != 'health' &&
     i.source == null &&
     i.status == ItemStatus.pending;
 

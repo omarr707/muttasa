@@ -25,8 +25,10 @@ String ruleTitle(RuleConfig c) => switch (c) {
   WorkConfig(:final title) => title,
   KidConfig(:final child) => 'توصيل واستلام $child',
   ClassConfig(:final title) => title,
-  RemindersConfig() => 'تذكيرات قصيرة',
+  RemindersConfig() => 'الماء والحركة والتنفّس',
   SavingsConfig() => 'الادخار',
+  HealthConfig() => 'صحتي',
+  MotherConfig() => 'الحمل والطفل',
 };
 
 String ruleIcon(RuleConfig c) => switch (c) {
@@ -35,9 +37,12 @@ String ruleIcon(RuleConfig c) => switch (c) {
   FlexConfig(:final icon) => icon,
   WorkConfig() => 'work',
   KidConfig() => 'kid',
-  ClassConfig() => 'class',
+  ClassConfig(:final type) => type.icon,
   RemindersConfig() => 'water',
   SavingsConfig() => 'coin',
+  HealthConfig() => 'health',
+  MotherConfig(:final stage) =>
+    stage == MotherStage.pregnant ? 'pregnant' : 'baby',
 };
 
 String ruleSummary(RuleConfig c, {String city = ''}) =>
@@ -89,10 +94,16 @@ String _ruleSummary(RuleConfig c, {String city = ''}) {
       :final end,
       :final place,
       :final who,
+      :final slots,
     ):
       return [
-        fmtWeekdays(weekdays),
-        fmtRange(start, end),
+        if (slots.isEmpty) ...[
+          fmtWeekdays(weekdays),
+          fmtRange(start, end),
+        ] else ...[
+          fmtWeekdays(slots.keys.toSet()),
+          'لكل يوم وقته',
+        ],
         if (who != 'أنا') who,
         if (place != null && place.isNotEmpty) place,
       ].join(' · ');
@@ -103,9 +114,25 @@ String _ruleSummary(RuleConfig c, {String city = ''}) {
       :final breathe,
     ):
       return [
-        if (water) 'الماء $cups أكواب مع الوجبات والاستراحة',
-        if (stand) 'الوقوف',
+        if (water) 'الماء $cups أكواب',
+        if (stand) 'الحركة',
         if (breathe) 'التنفّس',
+      ].join(' · ');
+    case HealthConfig(:final checks):
+      return checks.isEmpty
+          ? 'ما أضفت متابعة بعد'
+          : checks.map((h) => '${h.title} ${h.times.length}×').join(' · ');
+    case MotherConfig(
+      :final stage,
+      :final walk,
+      :final feeds,
+      :final feedEvery,
+    ):
+      return [
+        stage.label,
+        if (stage == MotherStage.pregnant && walk) 'مشي خفيف',
+        if (stage == MotherStage.infant && feeds)
+          'رضعة كل ${fmtDuration(feedEvery)}',
       ].join(' · ');
     case SavingsConfig(:final payDay, :final monthly, :final target):
       return [

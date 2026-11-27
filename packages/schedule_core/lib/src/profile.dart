@@ -32,7 +32,18 @@ class UserProfile {
     this.weekend = const {DateTime.friday, DateTime.saturday},
     this.hijriOffset = 0,
     this.currency = 'ريال',
+    this.ageGroup,
+    this.gender,
+    this.roles = const {},
   });
+
+  /// اختياري: الفئة العمرية والجنس، لترتيب الاقتراحات فقط.
+  final String? ageGroup;
+  final String? gender;
+
+  /// «وضعك الحالي» (اختيار متعدد): work, university, school, kids,
+  /// freelance, pregnant, infant, retired.
+  final Set<String> roles;
 
   /// الاسم (توقيع الرسائل).
   final String name;
@@ -77,6 +88,9 @@ class UserProfile {
     Set<int>? weekend,
     int? hijriOffset,
     String? currency,
+    String? ageGroup,
+    String? gender,
+    Set<String>? roles,
   }) => UserProfile(
     name: name ?? this.name,
     country: country ?? this.country,
@@ -92,6 +106,9 @@ class UserProfile {
     weekend: weekend ?? this.weekend,
     hijriOffset: hijriOffset ?? this.hijriOffset,
     currency: currency ?? this.currency,
+    ageGroup: ageGroup ?? this.ageGroup,
+    gender: gender ?? this.gender,
+    roles: roles ?? this.roles,
   );
 
   Map<String, Object?> toJson() => {
@@ -109,6 +126,9 @@ class UserProfile {
     'weekend': (weekend.toList()..sort()),
     'hijriOffset': hijriOffset,
     'currency': currency,
+    'ageGroup': ageGroup,
+    'gender': gender,
+    'roles': (roles.toList()..sort()),
   };
 
   factory UserProfile.fromJson(Map<String, Object?> j) => UserProfile(
@@ -130,6 +150,9 @@ class UserProfile {
     },
     hijriOffset: (j['hijriOffset'] as int?) ?? 0,
     currency: (j['currency'] as String?) ?? 'ريال',
+    ageGroup: j['ageGroup'] as String?,
+    gender: j['gender'] as String?,
+    roles: {...((j['roles'] as List?) ?? const []).cast<String>()},
   );
 }
 

@@ -15,7 +15,10 @@ import 'season_card.dart';
 import 'item_card.dart';
 import 'hour_grid.dart';
 import 'item_sheet.dart';
+import 'light_day_sheet.dart';
 import 'missed_sheet.dart';
+import 'move_sheet.dart';
+import 'outing_slot.dart';
 import 'stats_view.dart';
 import 'water_sheet.dart';
 
@@ -89,9 +92,9 @@ class _DayScreenState extends ConsumerState<DayScreen> {
           ? null
           : _Fabs(
               onAdd: () => showAddSheet(context, ref, date),
-              onRearrange: isToday
-                  ? () => rearrangeFlow(context, ref, date, plan)
-                  : null,
+              onRearrange: date.isBefore(today)
+                  ? null
+                  : () => _dayTools(context, date, plan, isToday),
             ),
       body: SafeArea(
         bottom: false,
@@ -288,6 +291,48 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     );
   }
 
+  /// زر العصا: «رتّب يومي» (اليوم) و«يوم خفيف».
+  Future<void> _dayTools(
+    BuildContext context,
+    Day date,
+    DayPlan plan,
+    bool isToday,
+  ) async {
+    final choice = await showModalBottomSheet<String>(
+      useRootNavigator: true,
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isToday)
+              ListTile(
+                leading: const Icon(Icons.auto_fix_high),
+                title: const Text('رتّب يومي'),
+                subtitle: const Text('المتأخر ينتقل لأقرب وقت فاضي بعد الآن'),
+                onTap: () => Navigator.pop(ctx, 'rearrange'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.spa_outlined),
+              title: const Text('يوم خفيف'),
+              subtitle: const Text(
+                'الثابت يبقى، والمرن نقترح نأجله. تراجع قبل التطبيق',
+              ),
+              onTap: () => Navigator.pop(ctx, 'light'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!context.mounted) return;
+    if (choice == 'rearrange') {
+      await rearrangeFlow(context, ref, date, plan);
+    } else if (choice == 'light') {
+      await showLightDaySheet(context, ref, date);
+    }
+  }
+
   List<Widget> _timeline(
     BuildContext context,
     DayPlan plan,
@@ -331,10 +376,20 @@ class _DayScreenState extends ConsumerState<DayScreen> {
               )
               .firstOrNull
         : null;
+    // ومثله الحركة: التمرين الجاي فقط.
+    final nextStand = isToday
+        ? plan.lines
+              .where(
+                (l) =>
+                    l.kind == LineKind.stand && !l.done && l.minute >= now - 30,
+              )
+              .firstOrNull
+        : null;
     final lines = _filter == _Filter.all && settings.showLines
         ? plan.lines
               .where((l) => l.kind != LineKind.sleep)
               .where((l) => l.kind != LineKind.water || l == nextWater)
+              .where((l) => l.kind != LineKind.stand || l == nextStand)
               .toList()
         : <ReminderLine>[];
     // أعمال الجمعة: بطاقة أب واحدة في مكانها من الجدول.
@@ -507,6 +562,29 @@ class _DayScreenState extends ConsumerState<DayScreen> {
 }
 
 /// صف العادات الخفيفة: الماء بعدّاده، والتنفس والوقفة.
+/// «٤ من ٨»: الأكواب المشروبة من الهدف (عدد التذكيرات منفصل عنه).
+String _waterLabel(WidgetRef ref, Day date, List<ReminderLine> lines) {
+  final rc = ref
+      .watch(engineProvider)
+      .rulesOn(date)
+      .map((r) => r.config)
+      .whereType<RemindersConfig>()
+      .firstOrNull;
+  if (rc == null) {
+    return fmtCount(lines.where((l) => l.done).length, lines.length);
+  }
+  final goalMl = ref.watch(
+    appDataProvider.select((d) => d.settings.waterGoalMl),
+  );
+  final per = (goalMl / rc.cups).round().clamp(1, 5000);
+  final ml = waterMl(
+    ref.watch(
+      appDataProvider.select((d) => d.logs[recordKey(date, 'water')]?.value),
+    ),
+  );
+  return fmtCount(ml ~/ per, rc.cups);
+}
+
 class _HabitChips extends ConsumerWidget {
   const _HabitChips({required this.date, required this.plan});
   final Day date;
@@ -515,14 +593,16 @@ class _HabitChips extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
     final water = plan.lines.where((l) => l.kind == LineKind.water).toList();
-    final breathe = plan.lines
+    final breaths = plan.lines
         .where((l) => l.kind == LineKind.breathe)
-        .firstOrNull;
+        .toList();
+    final breathe =
+        breaths.where((l) => !l.done).firstOrNull ?? breaths.firstOrNull;
     final stands = plan.lines.where((l) => l.kind == LineKind.stand).toList();
+    final nextStand = stands.where((l) => !l.done).firstOrNull;
     if (water.isEmpty && breathe == null && stands.isEmpty) {
       return const SizedBox.shrink();
     }
-    final ctrl = ref.read(appDataProvider.notifier);
     final standDone = ref.watch(
       appDataProvider.select(
         (d) => d.logs[recordKey(date, 'stand')]?.value ?? 0,
@@ -585,10 +665,7 @@ class _HabitChips extends ConsumerWidget {
             if (water.isNotEmpty)
               chip(
                 icon: Icons.water_drop,
-                label: fmtCount(
-                  water.where((l) => l.done).length,
-                  water.length,
-                ),
+                label: _waterLabel(ref, date, water),
                 bg: c.waterSoft,
                 fg: c.water,
                 onTap: () => showWaterSheet(context, ref, date),
@@ -606,8 +683,10 @@ class _HabitChips extends ConsumerWidget {
               const SizedBox(width: 8),
               chip(
                 icon: Icons.air,
-                label: 'تنفّس',
-                done: breathe.done,
+                label: breaths.length > 1
+                    ? 'تنفّس ${fmtCount(breaths.where((l) => l.done).length, breaths.length)}'
+                    : 'تنفّس',
+                done: breaths.every((l) => l.done),
                 onTap: () => showBreatheDialog(
                   context,
                   ref,
@@ -620,18 +699,15 @@ class _HabitChips extends ConsumerWidget {
               const SizedBox(width: 8),
               chip(
                 icon: Icons.accessibility_new,
-                label: standDone > 0 ? 'وقفة ${nums(standDone)}' : 'وقفة',
-                onTap: () async {
-                  await ctrl.countLight(date, 'stand', 1);
-                  if (context.mounted) {
-                    toast(
-                      context,
-                      'سجّلنا وقفة',
-                      actionLabel: 'تراجع',
-                      onAction: () => ctrl.countLight(date, 'stand', -1),
-                    );
-                  }
-                },
+                label: standDone > 0 ? 'حركة ${nums(standDone)}' : 'حركة',
+                done: stands.every((l) => l.done),
+                onTap: () => showMoveDialog(
+                  context,
+                  ref,
+                  date,
+                  lineKey: nextStand?.key,
+                  seed: standDone,
+                ),
               ),
             ],
           ],
@@ -847,7 +923,7 @@ class _Fabs extends StatelessWidget {
       if (onRearrange != null) ...[
         _circle(
           context,
-          label: 'رتّب يومي',
+          label: 'رتّب أو خفّف يومي',
           icon: Icons.auto_fix_high,
           size: 42,
           primary: false,
@@ -919,7 +995,43 @@ class _Banners extends ConsumerWidget {
         );
       }
     }
-    final unplaced = plan.unplaced;
+    // المراجعة الأسبوعية في اليوم اللي يختاره المستخدم.
+    if (date == today &&
+        today.weekday == reviewDayOf(ref) &&
+        ref.watch(
+              appDataProvider.select((d) => d.meta[reviewDoneKey(today)]),
+            ) ==
+            null) {
+      banners.add(
+        _Banner(
+          icon: Icons.insights_outlined,
+          title: 'مراجعة أسبوعك جاهزة',
+          body: 'وش مشى زين، ووش تأجل كثير، واقتراح تقرر فيه.',
+          action: 'افتحها',
+          onTap: () => showWeeklyReview(context, ref),
+        ),
+      );
+    }
+    // الطلعة اللي ما لقت وقت: «تحتاج موعدًا» مع يوم بديل.
+    for (final u in plan.unplaced) {
+      final kind = outingKindOf(u.key);
+      if (kind == null || date.isBefore(today)) continue;
+      final o = ref
+          .watch(appDataProvider.select((d) => d.contacts))
+          .outing(kind);
+      banners.add(
+        _Banner(
+          icon: Icons.event_note,
+          title: 'تحتاج موعدًا: ${kind.label}',
+          body: outingSlotText(ref, o, date),
+          action: 'اختر موعدًا',
+          onTap: () => showOutingSlotSheet(context, ref, kind, date),
+        ),
+      );
+    }
+    final unplaced = plan.unplaced
+        .where((u) => outingKindOf(u.key) == null)
+        .toList();
     if (unplaced.isNotEmpty) {
       banners.add(
         _Banner(

@@ -67,6 +67,14 @@ class _BreatheDialogState extends ConsumerState<_BreatheDialog>
   @override
   void initState() {
     super.initState();
+    // المدة الافتراضية من إعداد التنفّس.
+    final rc = ref
+        .read(engineProvider)
+        .rulesOn(widget.date)
+        .map((r) => r.config)
+        .whereType<RemindersConfig>()
+        .firstOrNull;
+    _minutes = rc?.breatheMinutes ?? 1;
     _ctrl.addListener(_tick);
     _ctrl.addStatusListener((s) {
       if (s != AnimationStatus.completed || _phase != _Phase.running) return;
@@ -204,7 +212,7 @@ class _BreatheDialogState extends ConsumerState<_BreatheDialog>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        for (final m in const [1, 2, 3])
+                        for (final m in const [1, 3, 5])
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: ChoiceChip(

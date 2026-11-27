@@ -11,8 +11,10 @@ import '../../services/contact_actions.dart';
 import '../../state/providers.dart';
 import '../goals/amount_sheet.dart';
 import 'breathe_sheet.dart';
+import 'health_sheet.dart';
 import 'item_sheet.dart';
 import 'message_sheet.dart';
+import 'move_sheet.dart';
 import 'water_sheet.dart';
 
 /// بطاقة المهمة من دليل التصميم: مربع أيقونة، عنوان بسطر، وصف بسطر، وإجراء واحد.
@@ -99,11 +101,25 @@ class ItemCard extends ConsumerWidget {
         ref.watch(
           appDataProvider.select((d) => d.meta[stageKey] == 'scheduled'),
         );
+    final healthKind = healthKindOf(i);
+    final reading = healthKind == null
+        ? null
+        : readingText(
+            healthKind,
+            ref.watch(
+              appDataProvider.select((d) => d.logs[recordKey(date, i.key)]),
+            ),
+          );
     final meta = <String>[
       if (outing && !done && !off) scheduled ? 'مجدولة' : 'مقترحة',
+      ?reading,
       fmtRange(i.start, i.end % minutesPerDay),
       if (off) statusLabel(i, isToday: isToday, now: now),
-      if (!off && i.subtitle != null && i.subtitle!.isNotEmpty && !_isDraft(i))
+      if (!off &&
+          reading == null &&
+          i.subtitle != null &&
+          i.subtitle!.isNotEmpty &&
+          !_isDraft(i))
         nums(i.subtitle),
       if (i.pagesFrom != null && i.kind == ItemKind.quran)
         'وردك ${nums(i.pagesTo! - i.pagesFrom! + 1)} صفحات',
@@ -173,6 +189,16 @@ class ItemCard extends ConsumerWidget {
         label: 'هنّئ',
         primary: true,
         onTap: () => showMessageSheet(context, ref, i, date),
+      );
+    } else if (healthKind != null &&
+        healthKind.hasReading &&
+        !done &&
+        !isFuture &&
+        !off) {
+      action = SmallButton(
+        label: 'سجّل',
+        primary: true,
+        onTap: () => logReading(context, ref, i, date),
       );
     } else if (i.kind == ItemKind.savings && !done && !isFuture && !off) {
       action = SmallButton(
@@ -289,7 +315,8 @@ class ItemCard extends ConsumerWidget {
                                   Expanded(
                                     child: Text(
                                       meta,
-                                      maxLines: 1,
+                                      // فكرة الهدية تنكتب كاملة في سطرين.
+                                      maxLines: i.icon == 'gift' ? 3 : 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: T.meta.copyWith(color: c.muted),
                                     ),
@@ -834,9 +861,12 @@ class ReminderLineTile extends ConsumerWidget {
     if (!date.isAfter(today)) {
       if (line.kind == LineKind.water) {
         onTap = () => showWaterSheet(context, ref, date);
+      } else if (line.kind == LineKind.stand && !line.done) {
+        onTap = () => showMoveDialog(context, ref, date, lineKey: line.key);
       } else if (line.kind == LineKind.breathe && !line.done) {
         onTap = () => showBreatheDialog(context, ref, date, lineKey: line.key);
       } else if (line.kind == LineKind.breathe ||
+          line.kind == LineKind.stand ||
           line.kind == LineKind.custom) {
         onTap = () => ref
             .read(appDataProvider.notifier)

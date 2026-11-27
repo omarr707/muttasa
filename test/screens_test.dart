@@ -482,7 +482,7 @@ void main() {
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
     await shot(tester, 'settings_dark');
-    await tester.ensureVisible(find.text('الطلعات'));
+    await tester.scrollUntilVisible(find.text('الطلعات'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('الطلعات'));
     await tester.pumpAndSettle();
@@ -515,6 +515,91 @@ void main() {
     await tester.tap(btn.first);
     await tester.pumpAndSettle();
     await shot(tester, 'message_sheet');
+  });
+
+  testWidgets('جولة ٦: حركة، يوم خفيف، مراجعة، إعدادات العادات وصحتي', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('حركة'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'move_ready');
+    await tester.tap(find.text('ابدأ'));
+    await tester.pump(const Duration(seconds: 3));
+    await shot(tester, 'move_running');
+    await tester.tap(find.text('أنهِ الآن'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('تمّ'));
+    await tester.pumpAndSettle();
+
+    final review = find.text('افتحها');
+    if (review.evaluate().isNotEmpty) {
+      await tester.tap(review.first);
+      await tester.pumpAndSettle();
+      await shot(tester, 'weekly_review');
+      await tester.tapAt(const Offset(200, 40));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byTooltip('رتّب أو خفّف يومي'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('يوم خفيف'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'light_day');
+    await tester.tapAt(const Offset(200, 40));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    final rem = find.text('الماء والحركة والتنفّس');
+    if (rem.evaluate().isEmpty) return;
+    await tester.ensureVisible(rem.first);
+    await tester.tap(rem.first);
+    await tester.pumpAndSettle();
+    final edit = find.text('عدّل');
+    if (edit.evaluate().isNotEmpty) {
+      await tester.tap(edit.first);
+      await tester.pumpAndSettle();
+      await shot(tester, 'reminders_editor');
+      await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await shot(tester, 'reminders_editor2');
+      await tester.tap(find.byType(CloseButton).first);
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('صحتي والالتزامات', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('صحتي'), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('صحتي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_editor');
+    await tester.tap(find.text('+ أضف متابعة'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_check');
+    await tester.tap(find.text('احفظ').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('احفظ').last);
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_preview');
+    await tester.tap(find.text('طبّق على المتبقي اليوم'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_health');
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('+ أضف التزامًا'));
+    await tester.tap(find.text('+ أضف التزامًا'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'commitment_menu');
+    await tester.tap(find.text('الجامعة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('نفس الوقت كل الأيام'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'commitment_editor');
   });
 
   testWidgets('الأهداف والتقرير والادخار', (tester) async {
@@ -591,14 +676,14 @@ void main() {
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
     await shot(tester, 'settings');
-    await tester.ensureVisible(find.text('المظهر'));
+    await tester.scrollUntilVisible(find.text('المظهر'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('المظهر'));
     await tester.pumpAndSettle();
     await shot(tester, 'appearance');
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('التواصل مع الناس'));
+    await tester.scrollUntilVisible(find.text('التواصل مع الناس'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('التواصل مع الناس'));
     await tester.pumpAndSettle();
@@ -714,11 +799,20 @@ void main() {
     await shot(tester, 'onboard_city');
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('دراسة جامعية'));
+    await tester.tap(find.text('أطفال'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_about');
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
     await shot(tester, 'onboard_day');
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
     await shot(tester, 'onboard_interests');
     await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_people');
+    await tester.tap(find.text('أضيفهم بعدين'));
     await tester.pumpAndSettle();
     await shot(tester, 'onboard_summary');
   });

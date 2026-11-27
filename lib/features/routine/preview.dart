@@ -79,7 +79,11 @@ Future<bool> saveWithPreview(
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'فيه ${nums(manualDays)} أيام عدّلتها بيدك. تعديلاتك والمنجز يبقون كما هم.',
+                          '${switch (manualDays) {
+                            1 => 'فيه يوم واحد',
+                            2 => 'فيه يومين',
+                            _ => 'فيه ${nums(manualDays)} أيام',
+                          }} عدّلتها بيدك. تعديلاتك والمنجز يبقون كما هم.',
                           style: TextStyle(
                             color: c.warn,
                             fontWeight: FontWeight.w600,

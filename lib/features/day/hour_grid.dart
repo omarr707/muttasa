@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,7 +33,69 @@ class _HourGridState extends ConsumerState<HourGrid> {
   String? _dragKey;
   double _dragDy = 0;
 
-  int get _from => (widget.plan.wake ~/ 60) * 60;
+  /// التمرير التلقائي أثناء السحب قرب حافة الشاشة.
+  Timer? _edge;
+  double _pointerY = 0;
+  final _nowKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    // اليوم الحالي: ننزل لخط «الآن».
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _nowKey.currentContext;
+      if (ctx != null && mounted) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: .3,
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _edge?.cancel();
+    super.dispose();
+  }
+
+  void _startEdgeScroll() {
+    _edge?.cancel();
+    _edge = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || _dragKey == null) return;
+      final pos = Scrollable.maybeOf(context)?.position;
+      if (pos == null) return;
+      final h = MediaQuery.of(context).size.height;
+      const zone = 110.0;
+      double v = 0;
+      if (_pointerY > h - zone - 80) {
+        v = 10 * ((_pointerY - (h - zone - 80)) / zone).clamp(0.2, 1.0);
+      } else if (_pointerY < zone + 60) {
+        v = -10 * (((zone + 60) - _pointerY) / zone).clamp(0.2, 1.0);
+      }
+      if (v == 0) return;
+      final to = (pos.pixels + v).clamp(
+        pos.minScrollExtent,
+        pos.maxScrollExtent,
+      );
+      final moved = to - pos.pixels;
+      if (moved == 0) return;
+      pos.jumpTo(to);
+      setState(() => _dragDy += moved);
+    });
+  }
+
+  /// يبدأ من الاستيقاظ، أو من أول التزام لو كان أبكر (مثل وردية ليلية).
+  int get _from {
+    final first = [
+      widget.plan.wake,
+      for (final i in widget.plan.items)
+        if (i.kind != ItemKind.work || i.start >= 0) i.start,
+    ].reduce((a, b) => a < b ? a : b);
+    return ((first.clamp(0, minutesPerDay) ~/ 5) * 5);
+  }
+
   int get _to {
     final last = [
       widget.plan.bedtime.clamp(0, minutesPerDay),
@@ -108,7 +172,11 @@ class _HourGridState extends ConsumerState<HourGrid> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    for (var h = _from; h <= _to; h += 60) ...[
+                    for (
+                      var h = ((_from + 59) ~/ 60) * 60;
+                      h <= _to;
+                      h += 60
+                    ) ...[
                       PositionedDirectional(
                         start: 0,
                         top: _y(h) - 7,
@@ -151,6 +219,7 @@ class _HourGridState extends ConsumerState<HourGrid> {
                       ),
                     if (widget.date == today && now >= _from && now <= _to)
                       PositionedDirectional(
+                        key: _nowKey,
                         start: _gutter - 4,
                         end: 0,
                         top: _y(now) - 1,
@@ -239,16 +308,28 @@ class _HourGridState extends ConsumerState<HourGrid> {
                 if (movable)
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onVerticalDragStart: (_) {
+                    onVerticalDragStart: (d) {
                       HapticFeedback.selectionClick();
+                      _pointerY = d.globalPosition.dy;
                       setState(() {
                         _dragKey = i.key;
                         _dragDy = 0;
                       });
+                      _startEdgeScroll();
                     },
-                    onVerticalDragUpdate: (d) =>
-                        setState(() => _dragDy += d.delta.dy),
+                    onVerticalDragUpdate: (d) {
+                      _pointerY = d.globalPosition.dy;
+                      setState(() => _dragDy += d.delta.dy);
+                    },
+                    onVerticalDragCancel: () {
+                      _edge?.cancel();
+                      setState(() {
+                        _dragKey = null;
+                        _dragDy = 0;
+                      });
+                    },
                     onVerticalDragEnd: (_) async {
+                      _edge?.cancel();
                       final t = previewStart.clamp(
                         0,
                         minutesPerDay - i.duration,

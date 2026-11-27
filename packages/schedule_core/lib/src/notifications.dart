@@ -155,6 +155,33 @@ NotificationPlan planNotifications(
       );
     }
   }
+  // الحركة والتنفّس والرضعات: تنبيهات روتين خفيفة.
+  if (s.notifyEnabled.contains(NotifyKind.routine)) {
+    for (final l in plan.lines.where(
+      (l) =>
+          !l.done &&
+          (l.kind == LineKind.stand ||
+              l.kind == LineKind.breathe ||
+              l.kind == LineKind.custom),
+    )) {
+      if (isToday && l.minute <= now) continue;
+      candidates.add(
+        PlannedNotification(
+          id: notificationId(d, l.key),
+          date: d,
+          minute: l.minute,
+          kind: NotifyKind.routine,
+          itemKey: l.key,
+          title: l.title,
+          body: switch (l.kind) {
+            LineKind.stand => 'دقيقتين حركة خفيفة؟ افتح التمرين',
+            LineKind.breathe => 'جلسة هادئة مع الزهرة',
+            _ => 'سجّلها بلمسة',
+          },
+        ),
+      );
+    }
+  }
   if (s.eveningReview && plan.bedtime < minutesPerDay) {
     final at = plan.bedtime - 30;
     if (!isToday || at > now) {

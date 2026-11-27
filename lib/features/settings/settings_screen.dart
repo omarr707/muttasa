@@ -142,6 +142,8 @@ class SettingsScreen extends ConsumerWidget {
                     p.copyWith(religion: v ? Religion.islam : Religion.none),
                   ),
                 ),
+                for (final k in const ['health', 'mother'])
+                  _PackRow(packKey: k),
                 SettingsRow(
                   icon: Icons.track_changes,
                   title: 'الأهداف',
@@ -212,7 +214,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Center(
               child: Text(
-                'مُتَّسَع ${nums('0.5.0')}',
+                'مُتَّسَع ${nums('0.6.0')}',
                 style: T.micro.copyWith(color: context.c.muted),
               ),
             ),
@@ -971,5 +973,55 @@ Future<void> importBackup(BuildContext context, WidgetRef ref) async {
     if (context.mounted) toast(context, e.message);
   } catch (_) {
     if (context.mounted) toast(context, 'تعذّر قراءة الملف');
+  }
+}
+
+/// «صحتي» و«الحمل والطفل»: تفعيل يفتح الإعداد، والإطفاء يوقفها من اليوم.
+class _PackRow extends ConsumerWidget {
+  const _PackRow({required this.packKey});
+  final String packKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = ref.watch(todayProvider);
+    final rule = ref
+        .watch(engineProvider)
+        .rulesOn(today)
+        .where((r) => r.key == packKey)
+        .firstOrNull;
+    final health = packKey == 'health';
+    final initial =
+        rule?.config ?? (health ? const HealthConfig() : const MotherConfig());
+    Future<void> edit() async {
+      final cfg = await editRuleConfig(context, initial);
+      if (cfg == null || !context.mounted) return;
+      if (cfg is HealthConfig && cfg.checks.isEmpty) {
+        if (rule != null) {
+          await ref
+              .read(appDataProvider.notifier)
+              .removeRule(packKey, from: today);
+        }
+        return;
+      }
+      await saveWithPreview(context, ref, rule, cfg, key: packKey);
+    }
+
+    return SettingsRow(
+      icon: health ? Icons.monitor_heart_outlined : Icons.child_care_outlined,
+      title: health ? 'صحتي' : 'الحمل والطفل',
+      subtitle: rule == null
+          ? (health
+                ? 'تذكير وتسجيل قياس السكر والضغط والدواء'
+                : 'مشي خفيف للحامل، وتذكير الرضعات')
+          : ruleSummary(rule.config),
+      toggle: rule != null,
+      onToggle: (v) async {
+        if (v) return edit();
+        await ref
+            .read(appDataProvider.notifier)
+            .removeRule(packKey, from: today);
+      },
+      onTap: rule == null ? null : edit,
+    );
   }
 }

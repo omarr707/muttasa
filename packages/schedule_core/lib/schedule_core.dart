@@ -16,6 +16,7 @@ export 'src/plan.dart';
 export 'src/engine.dart';
 export 'src/progress.dart';
 export 'src/actions.dart';
+export 'src/lighten.dart';
 export 'src/notifications.dart';
 export 'src/diff.dart';
 export 'src/goals.dart';

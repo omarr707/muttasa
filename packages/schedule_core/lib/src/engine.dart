@@ -502,28 +502,54 @@ class ScheduleEngine {
             fixed.add(item);
           }
         }
+      } else if (c is HealthConfig) {
+        for (final h in c.checks) {
+          if (!h.days.contains(d.weekday)) continue;
+          final times = [...h.times]..sort();
+          for (var k = 0; k < times.length; k++) {
+            fixed.add(
+              PlanItem(
+                key: 'health:${h.id}#${k + 1}',
+                ruleKey: r.key,
+                kind: ItemKind.task,
+                title: h.title,
+                subtitle: h.kind.hasReading ? 'سجّل القراءة' : null,
+                icon: h.kind.icon,
+                start: times[k],
+                end: times[k] + 5,
+                fixed: true,
+                counted: true,
+                track: TrackMode.confirm,
+                category: 'health',
+              ),
+            );
+          }
+        }
       } else if (c is ClassConfig) {
         if (ctx.classesOff) continue;
-        if (!c.weekdays.contains(d.weekday)) continue;
-        fixed.add(
-          PlanItem(
-            key: r.key,
-            ruleKey: r.key,
-            kind: ItemKind.klass,
-            title: c.title,
-            subtitle: [
-              if (c.who != 'أنا') c.who,
-              if (c.place != null && c.place!.isNotEmpty) c.place!,
-            ].join(' · '),
-            icon: 'class',
-            start: c.start,
-            end: c.end,
-            fixed: true,
-            counted: true,
-            track: TrackMode.confirm,
-            category: 'fixed',
-          ),
-        );
+        final slots = c.slotsOn(d.weekday);
+        for (var k = 0; k < slots.length; k++) {
+          final sl = slots[k];
+          fixed.add(
+            PlanItem(
+              key: k == 0 ? r.key : '${r.key}#${k + 1}',
+              ruleKey: r.key,
+              kind: ItemKind.klass,
+              title: c.title,
+              subtitle: [
+                if (c.who != 'أنا') c.who,
+                if (c.place != null && c.place!.isNotEmpty) c.place!,
+              ].join(' · '),
+              icon: c.type.icon,
+              start: sl.start,
+              end: sl.end,
+              fixed: true,
+              counted: true,
+              track: TrackMode.confirm,
+              category: 'fixed',
+            ),
+          );
+        }
       }
     }
 
@@ -744,6 +770,25 @@ class ScheduleEngine {
     for (final r in flexRules.where((r) => r.kind == RuleKind.habit)) {
       queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
     }
+    {
+      final m = _ruleOfKind<MotherConfig>(rules);
+      if (m != null && m.stage == MotherStage.pregnant && m.walk) {
+        queue.add(
+          _Flex(
+            key: 'mother:walk',
+            ruleKey: 'mother',
+            kind: ItemKind.habit,
+            title: 'مشي خفيف',
+            subtitle: 'بخطوة مريحة',
+            icon: 'walk',
+            duration: m.walkMinutes,
+            window: Window.afternoon,
+            track: TrackMode.confirm,
+            category: 'mother',
+          ),
+        );
+      }
+    }
     // الطلعة قبل اقتراحات التواصل: أطول وأصعب في إيجاد مكان.
     if (withWeekly) queue.addAll(_outingFlex(d, dayWake, bed));
     if (withWeekly) queue.addAll(_contactFlex(d, pr, dayWake, bed));
@@ -834,6 +879,13 @@ class ScheduleEngine {
       final w = f.span ?? windowSpan(f.window, pr, dayWake, bed);
       var t = _search(busy, f.duration, w, f.preferred);
       // الاقتراح يسكت إن ما لقى وقت، فالأقل أفضل من الحشو.
+      if (t == null && f.key.startsWith('outing:')) {
+        // الطلعة ما تختفي: تظهر تحت «تحتاج موعدًا» مع يوم بديل.
+        unplaced.add(
+          Unplaced(f.key, f.title, UnplacedReason.noTime, duration: f.duration),
+        );
+        continue;
+      }
       if (t == null && f.span != null && f.isExtra) continue;
       if (t == null && f.window != Window.any) {
         t = _search(
@@ -916,6 +968,24 @@ class ScheduleEngine {
           fasting: ctx.fasting,
         ),
       );
+    }
+    final mother = _ruleOfKind<MotherConfig>(rules);
+    if (mother != null && mother.stage == MotherStage.infant && mother.feeds) {
+      final every = mother.feedEvery.clamp(60, 360);
+      var n = 0;
+      for (var t = dayWake + 30; t < bed.clamp(0, minutesPerDay); t += every) {
+        n++;
+        final key = 'feed#$n';
+        lines.add(
+          ReminderLine(
+            key: key,
+            kind: LineKind.custom,
+            minute: (t ~/ 5) * 5,
+            title: 'رضعة',
+            done: _log(d, key)?.status == ItemStatus.done,
+          ),
+        );
+      }
     }
     if (bed < minutesPerDay && !nightShiftTonight) {
       lines.add(
@@ -1561,7 +1631,7 @@ class ScheduleEngine {
   }) {
     final out = <ReminderLine>[];
     final end = bed.clamp(0, minutesPerDay);
-    if (c.water && c.cups > 0) {
+    if (c.water && c.cups > 0 && c.waterDays.contains(d.weekday)) {
       // في الصيام: الماء بعد الإفطار فقط.
       final from = fasting ? pr.maghrib : wake;
       // مرتبطة بالوجبات والاستراحة، ثم توزيع على الفراغات الكبيرة. لا «كوب كل ساعة».
@@ -1591,7 +1661,7 @@ class ScheduleEngine {
         // مرسيان متقاربان يصيران تذكيرًا واحدًا.
         if (times.isEmpty || m - times.last >= 20) times.add(m);
       }
-      while (!fasting && times.length < c.cups && times.length < 16) {
+      while (!fasting && times.length < c.alerts && times.length < 16) {
         // أكبر فجوة بين المراسي.
         final pts = [from, ...times, end - 30];
         var bestGap = 0, bestAt = -1;
@@ -1606,53 +1676,93 @@ class ScheduleEngine {
         times.add((bestAt ~/ 5) * 5);
         times.sort();
       }
-      times = times.take(c.cups).toList();
+      times = times.take(c.alerts).toList();
       final drank = waterMl(_log(d, 'water')?.value);
       final per = (input.settings.waterGoalMl / c.cups).round().clamp(1, 5000);
       final cupsDone = drank ~/ per;
       for (var i = 0; i < times.length; i++) {
+        // التذكير يُعد منجزًا إذا وصل الشرب لحصته من الهدف.
+        final need = ((i + 1) * c.cups / times.length).ceil();
         out.add(
           ReminderLine(
             key: 'water#${i + 1}',
             kind: LineKind.water,
             minute: times[i],
             title: 'اشرب ماء',
-            done: i < cupsDone,
+            done: cupsDone >= need,
           ),
         );
       }
     }
-    if (c.stand) {
-      var n = 0;
-      for (final i in items.where((i) => i.kind == ItemKind.work)) {
-        for (var t = i.start + 90; t < i.end - 30; t += 120) {
-          if (i.workBreak != null && i.workBreak!.contains(t)) continue;
-          n++;
-          out.add(
-            ReminderLine(
-              key: 'stand#$n',
-              kind: LineKind.stand,
-              minute: t,
-              title: 'قم وتحرّك دقيقتين',
-            ),
-          );
-        }
+    // نقطة فاضية قريبة من [t]: لو وقعت داخل موعد (غير الدوام) ننقلها لبعده.
+    int freeNear(int t) {
+      for (var k = 0; k < 6; k++) {
+        final hit = items
+            .where(
+              (i) =>
+                  i.kind != ItemKind.work &&
+                  i.status == ItemStatus.pending &&
+                  i.start <= t &&
+                  i.end > t,
+            )
+            .firstOrNull;
+        if (hit == null) return t;
+        t = hit.end + 5;
       }
+      return t;
     }
-    if (c.breathe) {
-      final at = ((pr.asr + 45) ~/ 5) * 5;
-      if (at > wake && at < end) {
+
+    if (c.stand && c.standDays.contains(d.weekday) && !fasting) {
+      // الحركة على مدار اليقظة، في الدوام والإجازة، لا داخل الدوام فقط.
+      final every = c.standEvery.clamp(45, 240);
+      var n = 0;
+      int? last;
+      for (var t = wake + 90; t < end - 60 && n < 10; t += every) {
+        var m = freeNear(t);
+        final inBreak = items.any(
+          (i) => i.workBreak != null && i.workBreak!.contains(m),
+        );
+        if (inBreak || m >= end - 45) continue;
+        m = (m ~/ 5) * 5;
+        if (last != null && m - last < 40) continue;
+        last = m;
+        n++;
+        final key = 'stand#$n';
         out.add(
           ReminderLine(
-            key: 'breathe',
-            kind: LineKind.breathe,
-            minute: at,
-            title: 'تنفّس بعمق دقيقة',
-            done: _log(d, 'breathe')?.status == ItemStatus.done,
+            key: key,
+            kind: LineKind.stand,
+            minute: m,
+            title: 'تمرين حركة قصير',
+            done: _log(d, key)?.status == ItemStatus.done,
           ),
         );
       }
     }
+    if (c.breathe && c.breatheDays.contains(d.weekday)) {
+      for (final slot in BreatheSlot.values) {
+        if (!c.breatheSlots.contains(slot)) continue;
+        final raw = switch (slot) {
+          BreatheSlot.morning => wake + 45,
+          BreatheSlot.afternoon => pr.asr + 45,
+          BreatheSlot.night => end - 40,
+        };
+        final at = (freeNear(raw) ~/ 5) * 5;
+        if (at <= wake || at >= end) continue;
+        out.add(
+          ReminderLine(
+            key: slot.key,
+            kind: LineKind.breathe,
+            minute: at,
+            title: c.breatheMinutes == 1
+                ? 'تنفّس بعمق دقيقة'
+                : 'تنفّس بعمق ${c.breatheMinutes} دقائق',
+            done: _log(d, slot.key)?.status == ItemStatus.done,
+          ),
+        );
+      }
+    }
+    out.sort((a, b) => a.minute.compareTo(b.minute));
     return out;
   }
 }

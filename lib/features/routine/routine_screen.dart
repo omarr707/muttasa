@@ -85,7 +85,7 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
       ..sort((a, b) => _order(a).compareTo(_order(b)));
 
     return [
-      const SectionTitle('مواعيدك الثابتة'),
+      const SectionTitle('التزاماتي'),
       for (final r in fixedRules)
         _RuleTile(rule: r, today: today, city: profile.city),
       if (fixedRules.any((r) => r.kind == RuleKind.kid)) _PartnerTile(),
@@ -95,13 +95,13 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
           color: context.c.bg,
           border: context.c.accent,
           child: Text(
-            'الدوام، توصيل الأولاد، الحصص والدورات. ما يتحركون أبدًا، والباقي يترتب حولهم.',
+            'الدوام، الجامعة، المدرسة، النادي، الدورات وتوصيل الأولاد. هذي تدخل الجدول أولًا، والباقي يترتب حولها.',
             style: TextStyle(color: context.c.ink2),
           ),
         ),
       const SizedBox(height: 10),
       PillButton(
-        label: '+ أضف إلى تشكيلتي',
+        label: '+ أضف التزامًا',
         expand: true,
         onPressed: () => _addFixed(context, all),
       ),
@@ -135,35 +135,46 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
     final choice = await showModalBottomSheet<String>(
       useRootNavigator: true,
       context: context,
+      isScrollControlled: true,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!hasWork)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!hasWork)
+                ListTile(
+                  leading: Icon(iconFor('work')),
+                  title: const Text('الدوام'),
+                  subtitle: const Text(
+                    'صباحي، مسائي، ليلي أو مخصص، والاستراحة',
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'work'),
+                ),
               ListTile(
-                leading: Icon(iconFor('work')),
-                title: const Text('الدوام'),
-                subtitle: const Text('صباحي، مسائي، ليلي أو مخصص، والاستراحة'),
-                onTap: () => Navigator.pop(ctx, 'work'),
+                leading: Icon(iconFor('kid')),
+                title: const Text('توصيل واستلام'),
+                subtitle: const Text(
+                  'اختر الطفل، وفعّل التوصيل أو الاستلام أو الاثنين',
+                ),
+                onTap: () => Navigator.pop(ctx, 'kid'),
               ),
-            ListTile(
-              leading: Icon(iconFor('kid')),
-              title: const Text('توصيل واستلام'),
-              subtitle: const Text(
-                'اختر الطفل، وفعّل التوصيل أو الاستلام أو الاثنين',
-              ),
-              onTap: () => Navigator.pop(ctx, 'kid'),
-            ),
-            ListTile(
-              leading: Icon(iconFor('class')),
-              title: const Text('حصة أو دورة'),
-              subtitle: const Text(
-                'حصة موسيقى، نادي، جامعة أو دورة بموعد أسبوعي',
-              ),
-              onTap: () => Navigator.pop(ctx, 'class'),
-            ),
-            const SizedBox(height: 8),
-          ],
+              for (final t in CommitmentType.values)
+                ListTile(
+                  leading: Icon(iconFor(t.icon)),
+                  title: Text(t.label),
+                  subtitle: Text(switch (t) {
+                    CommitmentType.university =>
+                      'المحاضرات بأيامها وأوقاتها، ولو أكثر من محاضرة في اليوم',
+                    CommitmentType.school => 'دوام المدرسة لك أو لطفلك',
+                    CommitmentType.club => 'النادي أو التمرين بموعد ثابت',
+                    CommitmentType.course => 'دورة أو حصة أسبوعية',
+                    CommitmentType.other => 'أي موعد أسبوعي يتكرر',
+                  }),
+                  onTap: () => Navigator.pop(ctx, 'class:${t.name}'),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -176,11 +187,9 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
         },
       ),
       'kid' => const KidConfig(child: '', days: {}),
-      _ => const ClassConfig(
-        title: '',
-        weekdays: {DateTime.tuesday},
-        start: 17 * 60,
-        end: 18 * 60,
+      _ => _commitmentPreset(
+        CommitmentType.values.byName(choice.substring(6)),
+        weekend,
       ),
     };
     final cfg = await editRuleConfig(context, initial, weekend: weekend);
@@ -599,4 +608,49 @@ class _PartnerTile extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// قيم أولية معقولة لكل نوع التزام.
+ClassConfig _commitmentPreset(CommitmentType t, Set<int> weekend) {
+  final weekdays = {
+    for (final d in weekOrder)
+      if (!weekend.contains(d)) d,
+  };
+  return switch (t) {
+    CommitmentType.university => ClassConfig(
+      title: t.defaultTitle,
+      type: t,
+      weekdays: weekdays,
+      start: 8 * 60,
+      end: 10 * 60,
+    ),
+    CommitmentType.school => ClassConfig(
+      title: t.defaultTitle,
+      type: t,
+      weekdays: weekdays,
+      start: 7 * 60,
+      end: 13 * 60 + 30,
+    ),
+    CommitmentType.club => ClassConfig(
+      title: t.defaultTitle,
+      type: t,
+      weekdays: const {DateTime.sunday, DateTime.tuesday},
+      start: 18 * 60,
+      end: 19 * 60,
+    ),
+    CommitmentType.course => ClassConfig(
+      title: t.defaultTitle,
+      type: t,
+      weekdays: const {DateTime.monday},
+      start: 17 * 60,
+      end: 18 * 60 + 30,
+    ),
+    CommitmentType.other => ClassConfig(
+      title: '',
+      type: t,
+      weekdays: const {DateTime.tuesday},
+      start: 17 * 60,
+      end: 18 * 60,
+    ),
+  };
 }
