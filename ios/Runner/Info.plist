@@ -4,6 +4,10 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>نستخدم موقعك مرة واحدة لاختيار مدينتك وحساب مواقيت الصلاة، ولا نتتبّعك.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>نقرأ مواعيد التقويمات التي تختارها ليرتّب جدولك حولها. لا نكتب في تقويمك أبدًا.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>نقرأ مواعيد التقويمات التي تختارها ليرتّب جدولك حولها. لا نكتب في تقويمك أبدًا.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>تختار شخصًا واحدًا فننسخ اسمه ورقمه فقط.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

@@ -8,6 +8,7 @@ import '../../core/widgets.dart';
 import '../../state/providers.dart';
 import 'add_sheet.dart';
 import 'friday_sheet.dart';
+import 'season_card.dart';
 import 'item_card.dart';
 import 'item_sheet.dart';
 import 'missed_sheet.dart';
@@ -158,6 +159,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                       if (!date.isAfter(today))
                         _HabitChips(date: date, plan: plan),
                       FridayCard(date: date, plan: plan),
+                      SeasonCards(date: date, plan: plan),
                       if (missed.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         MissedBar(

@@ -107,7 +107,7 @@ void main() {
       expect(plan.conflicts, isEmpty);
     });
 
-    test('المشي بعد الإفطار، والماء بعد الإفطار فقط', () {
+    test('المشي بعد الإفطار، والماء بين الإفطار والسحور فقط', () {
       final e = engine();
       // أسبوع رمضان كامل: كل جلسة مشي بعد المغرب.
       for (var i = 0; i < 7; i++) {
@@ -117,7 +117,12 @@ void main() {
           expect(walk.start, greaterThanOrEqualTo(plan.prayers.maghrib + 30));
         }
         for (final l in plan.lines.where((l) => l.kind == LineKind.water)) {
-          expect(l.minute, greaterThanOrEqualTo(plan.prayers.maghrib));
+          final pr = plan.prayers;
+          expect(
+            l.minute >= pr.maghrib || l.minute < pr.fajr,
+            isTrue,
+            reason: 'ماء وقت الصيام ${l.minute}',
+          );
         }
       }
     });

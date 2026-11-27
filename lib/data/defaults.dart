@@ -19,6 +19,7 @@ class Country {
     required this.weekend,
     required this.currency,
     required this.cities,
+    this.holidays = const [],
   });
   final String code;
   final String name;
@@ -26,6 +27,9 @@ class Country {
   final Set<int> weekend;
   final String currency;
   final List<City> cities;
+
+  /// المناسبات الوطنية والعطل الرسمية (من لوحة التحكم لاحقًا).
+  final List<Holiday> holidays;
 
   String get weekendLabel =>
       'الإجازة ${fmtWeekdays(weekend).replaceAll('، ', ' و')}';
@@ -66,6 +70,12 @@ class Defaults {
                   (ct['lng'] as num).toDouble(),
                   ct['tz'] as String,
                 ),
+            ],
+            holidays: [
+              for (final h
+                  in ((c['holidays'] as List?) ?? const [])
+                      .cast<Map<String, dynamic>>())
+                Holiday.fromJson(h),
             ],
           ),
       ],

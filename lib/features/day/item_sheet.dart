@@ -39,6 +39,16 @@ Future<void> showItemSheet(
       ),
     );
   } else if (i.status == ItemStatus.pending || i.status == ItemStatus.missed) {
+    final share = ref.read(appDataProvider).partner;
+    if (i.kind == ItemKind.kid && share.active) {
+      actions.add(
+        _Action(
+          Icons.swap_horiz,
+          i.partner ? 'أنا أسويه هذا اليوم' : 'على ${share.name} هذا اليوم',
+          () => ctrl.swapRun(date, i),
+        ),
+      );
+    }
     if (!isFuture && i.track != TrackMode.auto) {
       actions.add(
         _Action(

@@ -1499,13 +1499,25 @@ class ScheduleEngine {
         }
       }
       var times = <int>[];
+      if (fasting) {
+        // في الصيام: بعد الإفطار، بعد العشاء، قبل النوم، ومع السحور.
+        times = [
+          pr.maghrib + 20,
+          pr.maghrib + 90,
+          pr.isha + 100,
+          end - 45,
+          if (pr.fajr - 40 > wake) pr.fajr - 40,
+        ].map((m) => (m ~/ 5) * 5).toSet().toList()..sort();
+      }
       for (final m
-          in (anchors.where((m) => m >= from && m < end - 30).toList()
+          in (anchors
+              .where((m) => !fasting && m >= from && m < end - 30)
+              .toList()
             ..sort())) {
         // مرسيان متقاربان يصيران تذكيرًا واحدًا.
         if (times.isEmpty || m - times.last >= 20) times.add(m);
       }
-      while (times.length < c.cups && times.length < 16) {
+      while (!fasting && times.length < c.cups && times.length < 16) {
         // أكبر فجوة بين المراسي.
         final pts = [from, ...times, end - 30];
         var bestGap = 0, bestAt = -1;

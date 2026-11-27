@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:schedule_core/schedule_core.dart';
 
+import 'calendar_link.dart';
 import 'database.dart';
 
 /// كل بيانات المستخدم في الذاكرة. صغيرة في المرحلة الأولى (قواعد + سجلات).
@@ -19,6 +20,9 @@ class AppData {
     this.people = const [],
     this.contacts = const ContactsConfig(),
     this.goals = const [],
+    this.modes = const [],
+    this.partner = const PartnerShare(),
+    this.calendar = const CalendarLink(),
   });
 
   final UserProfile? profile;
@@ -35,6 +39,15 @@ class AppData {
   /// الأهداف بالنتيجة والموعد (التي أنشأها المستخدم).
   final List<Goal> goals;
 
+  /// الأوضاع: إجازة، سفر، إيقاف مؤقت.
+  final List<LifeMode> modes;
+
+  /// مشاركة مشاوير الأولاد مع الزوج أو الزوجة.
+  final PartnerShare partner;
+
+  /// التقويمات المربوطة وآخر نسخة من مواعيدها.
+  final CalendarLink calendar;
+
   bool get onboarded => profile != null;
 
   AppData copyWith({
@@ -49,6 +62,9 @@ class AppData {
     List<Person>? people,
     ContactsConfig? contacts,
     List<Goal>? goals,
+    List<LifeMode>? modes,
+    PartnerShare? partner,
+    CalendarLink? calendar,
   }) => AppData(
     profile: profile ?? this.profile,
     settings: settings ?? this.settings,
@@ -61,6 +77,9 @@ class AppData {
     people: people ?? this.people,
     contacts: contacts ?? this.contacts,
     goals: goals ?? this.goals,
+    modes: modes ?? this.modes,
+    partner: partner ?? this.partner,
+    calendar: calendar ?? this.calendar,
   );
 }
 
@@ -138,8 +157,28 @@ class Repository {
       goals: kv['goals'] == null
           ? const []
           : _goals(jsonDecode(kv['goals']!) as List),
+      modes: kv['modes'] == null
+          ? const []
+          : _modes(jsonDecode(kv['modes']!) as List),
+      partner: kv['partner'] == null
+          ? const PartnerShare()
+          : PartnerShare.fromJson(_decode(kv['partner']!)),
+      calendar: kv['calendar'] == null
+          ? const CalendarLink()
+          : CalendarLink.fromJson(_decode(kv['calendar']!)),
     );
   }
+
+  static List<LifeMode> _modes(List l) => l
+      .map((e) => LifeMode.fromJson((e as Map).cast<String, Object?>()))
+      .toList();
+
+  Future<void> saveModes(List<LifeMode> m) =>
+      setKv('modes', jsonEncode(m.map((e) => e.toJson()).toList()));
+  Future<void> savePartner(PartnerShare p) =>
+      setKv('partner', jsonEncode(p.toJson()));
+  Future<void> saveCalendar(CalendarLink c) =>
+      setKv('calendar', jsonEncode(c.toJson()));
 
   static List<Goal> _goals(List l) =>
       l.map((e) => Goal.fromJson((e as Map).cast<String, Object?>())).toList();
@@ -293,6 +332,10 @@ class Repository {
     'people': d.people.map((p) => p.toJson()).toList(),
     'contacts': d.contacts.toJson(),
     'goals': d.goals.map((g) => g.toJson()).toList(),
+    'modes': d.modes.map((m) => m.toJson()).toList(),
+    'partner': d.partner.toJson(),
+    // مواعيد التقويم لا تُنسخ: تُقرأ من الجهاز من جديد.
+    'calendar': CalendarLink(calendars: d.calendar.calendars).toJson(),
   };
 
   /// يقرأ النسخة ويتحقق منها دون أن يكتب شيئًا.
@@ -335,6 +378,17 @@ class Repository {
               (j['contacts']! as Map).cast<String, Object?>(),
             ),
       goals: _goals((j['goals'] as List?) ?? const []),
+      modes: _modes((j['modes'] as List?) ?? const []),
+      partner: j['partner'] == null
+          ? const PartnerShare()
+          : PartnerShare.fromJson(
+              (j['partner']! as Map).cast<String, Object?>(),
+            ),
+      calendar: j['calendar'] == null
+          ? const CalendarLink()
+          : CalendarLink.fromJson(
+              (j['calendar']! as Map).cast<String, Object?>(),
+            ),
     );
   }
 
@@ -347,6 +401,9 @@ class Repository {
       await savePeople(d.people);
       await saveContacts(d.contacts);
       await saveGoals(d.goals);
+      await saveModes(d.modes);
+      await savePartner(d.partner);
+      await saveCalendar(d.calendar);
       for (final e in d.meta.entries) {
         await setMeta(e.key, e.value);
       }
