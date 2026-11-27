@@ -158,8 +158,8 @@ Future<void> showItemSheet(
                       i.title,
                       style: const TextStyle(
                         fontFamily: fontDisplay,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 19,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
                       ),
                     ),
                   ),
@@ -174,7 +174,7 @@ Future<void> showItemSheet(
                 child: Text(
                   '${fmtDayLong(date)} · ${fmtRange(i.start, i.end % minutesPerDay)}'
                   '${i.doneAt != null ? ' · نفّذتها ${fmtTime(i.doneAt!)}' : ''}',
-                  style: TextStyle(color: c.ink2, fontSize: 13),
+                  style: TextStyle(color: c.ink2, fontSize: 12.5),
                 ),
               ),
               if (!i.counted && i.kind != ItemKind.work)
@@ -243,8 +243,8 @@ Future<void> showPostponeSheet(
               'أجّل «${i.title}»',
               style: const TextStyle(
                 fontFamily: fontDisplay,
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
               ),
             ),
             const SizedBox(height: 8),
@@ -340,7 +340,7 @@ Future<Day?> pickDay(
           children: [
             const Text(
               'اختر اليوم',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -355,7 +355,9 @@ Future<Day?> pickDay(
                           ? 'اليوم'
                           : (k == 1
                                 ? 'بكرة'
-                                : '${arabicWeekdays[from.add(k).weekday]} ${from.add(k).day}/${from.add(k).month}'),
+                                : nums(
+                                    '${arabicWeekdays[from.add(k).weekday]} ${from.add(k).day}/${from.add(k).month}',
+                                  )),
                     ),
                     onPressed: () => Navigator.pop(ctx, from.add(k)),
                   ),
@@ -430,7 +432,7 @@ Future<void> moveItemFlow(
           children: [
             Text(
               'نقل «${i.title}» إلى ${fmtTime(t!)}',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             ),
             const SizedBox(height: 8),
             ListTile(
@@ -480,10 +482,10 @@ Future<void> showPagesSheet(
                     icon: const Icon(Icons.add_circle_outline),
                   ),
                   Text(
-                    '$v',
+                    nums(v),
                     style: const TextStyle(
                       fontFamily: fontDisplay,
-                      fontSize: 24,
+                      fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -505,8 +507,8 @@ Future<void> showPagesSheet(
                 Text(
                   'سجّل تقدمك في ${i.book ?? i.title}',
                   style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -529,7 +531,7 @@ Future<void> showPagesSheet(
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${to - from + 1} صفحات',
+                  '${nums(to - from + 1)} صفحات',
                   style: TextStyle(color: c.muted),
                 ),
                 const SizedBox(height: 12),

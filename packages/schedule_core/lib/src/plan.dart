@@ -16,6 +16,7 @@ enum ItemKind {
   task,
   period,
   event,
+  contact,
 }
 
 /// عنصر واحد في خطة اليوم.
@@ -48,6 +49,7 @@ class PlanItem {
     this.window,
     this.log,
     this.subs = const [],
+    this.personId,
   });
 
   /// المفتاح الثابت (date, itemKey) مثل habit:read#2 أو prayer:fajr.
@@ -88,6 +90,9 @@ class PlanItem {
 
   /// بنود فرعية داخل البطاقة (السنن الرواتب). لا تدخل في نسبة الإنجاز.
   final List<SubItem> subs;
+
+  /// لبطاقات التواصل: الشخص المقترح.
+  final String? personId;
 
   int get duration => end - start;
   Span get span => Span(start, end);
@@ -146,6 +151,7 @@ class PlanItem {
     window: window,
     log: log ?? this.log,
     subs: subs,
+    personId: personId,
   );
 
   @override

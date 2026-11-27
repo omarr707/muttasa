@@ -143,6 +143,36 @@ enum NotifyKind {
   final String label;
 }
 
+/// حجم الخط في التطبيق.
+enum FontSize {
+  small('صغير', 0.9),
+  medium('متوسط', 1.0),
+  large('كبير', 1.15);
+
+  const FontSize(this.label, this.factor);
+  final String label;
+  final double factor;
+}
+
+enum ThemePref {
+  system('تلقائي'),
+  light('فاتح'),
+  dark('داكن');
+
+  const ThemePref(this.label);
+  final String label;
+}
+
+/// التاريخ في رأس «يومي».
+enum HeaderDate {
+  both('الاثنين معًا'),
+  gregorian('ميلادي'),
+  hijri('هجري');
+
+  const HeaderDate(this.label);
+  final String label;
+}
+
 class AppSettings {
   const AppSettings({
     this.optionalCapMinutes = 180,
@@ -157,6 +187,16 @@ class AppSettings {
     this.quietEnd = 6 * 60,
     this.dailyCap = 12,
     this.eveningReview = true,
+    this.fontSize = FontSize.medium,
+    this.arabicDigits = true,
+    this.theme = ThemePref.system,
+    this.headerDate = HeaderDate.both,
+    this.showLines = true,
+    this.compact = false,
+    this.waterGoalMl = 2000,
+    this.lastWaterMl = 250,
+    this.fridaySheet = true,
+    this.goalsEnabled = true,
   });
 
   /// الحد اليومي للوقت الاختياري.
@@ -176,6 +216,32 @@ class AppSettings {
   /// «راجع يومك» قبل وقت النوم بنصف ساعة.
   final bool eveningReview;
 
+  // المظهر
+  final FontSize fontSize;
+
+  /// أرقام هندية «١٢٣» افتراضيًا.
+  final bool arabicDigits;
+  final ThemePref theme;
+  final HeaderDate headerDate;
+
+  /// عرض التذكيرات القصيرة كخطوط في الجدول.
+  final bool showLines;
+
+  /// بطاقات أقصر (٤٨).
+  final bool compact;
+
+  // الماء
+  final int waterGoalMl;
+
+  /// آخر كمية اختارها المستخدم.
+  final int lastWaterMl;
+
+  /// ورقة «جمعة مباركة» عند أول فتح كل جمعة.
+  final bool fridaySheet;
+
+  /// تبويب «أهدافي».
+  final bool goalsEnabled;
+
   AppSettings copyWith({
     int? optionalCapMinutes,
     Set<NotifyKind>? notifyEnabled,
@@ -184,6 +250,16 @@ class AppSettings {
     int? quietEnd,
     int? dailyCap,
     bool? eveningReview,
+    FontSize? fontSize,
+    bool? arabicDigits,
+    ThemePref? theme,
+    HeaderDate? headerDate,
+    bool? showLines,
+    bool? compact,
+    int? waterGoalMl,
+    int? lastWaterMl,
+    bool? fridaySheet,
+    bool? goalsEnabled,
   }) => AppSettings(
     optionalCapMinutes: optionalCapMinutes ?? this.optionalCapMinutes,
     notifyEnabled: notifyEnabled ?? this.notifyEnabled,
@@ -192,6 +268,16 @@ class AppSettings {
     quietEnd: quietEnd ?? this.quietEnd,
     dailyCap: dailyCap ?? this.dailyCap,
     eveningReview: eveningReview ?? this.eveningReview,
+    fontSize: fontSize ?? this.fontSize,
+    arabicDigits: arabicDigits ?? this.arabicDigits,
+    theme: theme ?? this.theme,
+    headerDate: headerDate ?? this.headerDate,
+    showLines: showLines ?? this.showLines,
+    compact: compact ?? this.compact,
+    waterGoalMl: waterGoalMl ?? this.waterGoalMl,
+    lastWaterMl: lastWaterMl ?? this.lastWaterMl,
+    fridaySheet: fridaySheet ?? this.fridaySheet,
+    goalsEnabled: goalsEnabled ?? this.goalsEnabled,
   );
 
   Map<String, Object?> toJson() => {
@@ -202,6 +288,16 @@ class AppSettings {
     'quietEnd': quietEnd,
     'dailyCap': dailyCap,
     'eveningReview': eveningReview,
+    'fontSize': fontSize.name,
+    'arabicDigits': arabicDigits,
+    'theme': theme.name,
+    'headerDate': headerDate.name,
+    'showLines': showLines,
+    'compact': compact,
+    'waterGoalMl': waterGoalMl,
+    'lastWaterMl': lastWaterMl,
+    'fridaySheet': fridaySheet,
+    'goalsEnabled': goalsEnabled,
   };
 
   factory AppSettings.fromJson(Map<String, Object?> j) => AppSettings(
@@ -216,5 +312,17 @@ class AppSettings {
     quietEnd: (j['quietEnd'] as int?) ?? 360,
     dailyCap: (j['dailyCap'] as int?) ?? 12,
     eveningReview: (j['eveningReview'] as bool?) ?? true,
+    fontSize: FontSize.values.byName((j['fontSize'] as String?) ?? 'medium'),
+    arabicDigits: (j['arabicDigits'] as bool?) ?? true,
+    theme: ThemePref.values.byName((j['theme'] as String?) ?? 'system'),
+    headerDate: HeaderDate.values.byName(
+      (j['headerDate'] as String?) ?? 'both',
+    ),
+    showLines: (j['showLines'] as bool?) ?? true,
+    compact: (j['compact'] as bool?) ?? false,
+    waterGoalMl: (j['waterGoalMl'] as int?) ?? 2000,
+    lastWaterMl: (j['lastWaterMl'] as int?) ?? 250,
+    fridaySheet: (j['fridaySheet'] as bool?) ?? true,
+    goalsEnabled: (j['goalsEnabled'] as bool?) ?? true,
   );
 }

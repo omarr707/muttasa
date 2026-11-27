@@ -33,7 +33,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/onboarding', builder: (_, _) => const OnboardingScreen()),
-      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _Shell(shell: shell),
         branches: [
@@ -59,13 +58,21 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(path: '/goals', builder: (_, _) => const GoalsScreen()),
             ],
           ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (_, _) => const SettingsScreen(),
+              ),
+            ],
+          ),
         ],
       ),
     ],
   );
 });
 
-/// ثلاثة تبويبات سفلية: يومي · روتيني · أهدافي.
+/// أربعة تبويبات سفلية: يومي · روتيني · أهدافي · الإعدادات.
 class _Shell extends StatelessWidget {
   const _Shell({required this.shell});
   final StatefulNavigationShell shell;
@@ -74,6 +81,7 @@ class _Shell extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     body: shell,
     bottomNavigationBar: NavigationBar(
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       selectedIndex: shell.currentIndex,
       onDestinationSelected: (i) =>
           shell.goBranch(i, initialLocation: i == shell.currentIndex),
@@ -92,6 +100,11 @@ class _Shell extends StatelessWidget {
           icon: Icon(Icons.track_changes_outlined),
           selectedIcon: Icon(Icons.track_changes),
           label: 'أهدافي',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'الإعدادات',
         ),
       ],
     ),

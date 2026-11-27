@@ -76,6 +76,8 @@ EngineInput buildInput(
   overrides: d.overrides,
   carries: d.carries,
   logs: d.logs,
+  people: d.people,
+  contacts: d.contacts,
   prayers: calc?.forDay ?? (_) => DayPrayers.neutral,
   today: today,
   nowMinute: 0,
@@ -124,9 +126,21 @@ class AppController extends Notifier<AppData> {
   // التهيئة والإعدادات
   // --------------------------------------------------------------------------
 
-  Future<void> completeOnboarding(UserProfile profile, List<Rule> rules) async {
+  Future<void> completeOnboarding(
+    UserProfile profile,
+    List<Rule> rules, {
+    ContactsConfig? contacts,
+    AppSettings? settings,
+  }) async {
     await _repo.saveProfile(profile);
-    await _repo.saveSettings(state.settings);
+    final s = settings ?? state.settings;
+    await _repo.saveSettings(s);
+    if (contacts != null) {
+      await _repo.saveContacts(contacts);
+      state = state.copyWith(contacts: contacts, settings: s);
+    } else {
+      state = state.copyWith(settings: s);
+    }
     for (final r in rules) {
       await _repo.upsertRule(r);
     }
@@ -215,13 +229,98 @@ class AppController extends Notifier<AppData> {
     state = state.copyWith(logs: logs, carries: carries);
   }
 
-  /// الماء: «4 من 8» بنقرة مع تراجع.
-  Future<void> addWater(Day d, int delta) async {
+  /// الماء بالمل. كل شربة تُحفظ في سجل اليوم لتتراجع عن آخرها.
+  Future<void> addWater(Day d, int ml) async {
     final cur = state.logs[recordKey(d, 'water')];
-    final v = ((cur?.value ?? 0) + delta).clamp(0, 30);
+    final v = (waterMl(cur?.value) + ml).clamp(0, 10000);
+    final sips = waterSips(d);
+    final next = ml > 0
+        ? [...sips, (_nowMin, ml)]
+        : (sips.isEmpty ? sips : sips.sublist(0, sips.length - 1));
     await _putLog(
       (cur ?? ItemLog(date: d, itemKey: 'water', status: ItemStatus.pending))
           .copyWith(value: v, category: 'water'),
+    );
+    await setMeta(
+      'water.${d.key}',
+      next.map((s) => '${s.$1}:${s.$2}').join(','),
+    );
+    if (ml > 0 && ml != state.settings.lastWaterMl) {
+      await updateSettings(state.settings.copyWith(lastWaterMl: ml));
+    }
+  }
+
+  /// تراجع عن آخر شربة.
+  Future<void> undoWater(Day d) async {
+    final sips = waterSips(d);
+    if (sips.isEmpty) return;
+    await addWater(d, -sips.last.$2);
+  }
+
+  /// شربات اليوم: (الدقيقة، المل).
+  List<(int, int)> waterSips(Day d) {
+    final raw = state.meta['water.${d.key}'];
+    if (raw == null || raw.isEmpty) return const [];
+    return [
+      for (final p in raw.split(','))
+        if (p.contains(':'))
+          (int.parse(p.split(':')[0]), int.parse(p.split(':')[1])),
+    ];
+  }
+
+  Future<void> setMeta(String key, String value) async {
+    await _repo.setMeta(key, value);
+    state = state.copyWith(meta: {...state.meta, key: value});
+  }
+
+  // --------------------------------------------------------------------------
+  // التواصل مع الناس
+  // --------------------------------------------------------------------------
+
+  Future<void> updateContacts(ContactsConfig c) async {
+    await _repo.saveContacts(c);
+    state = state.copyWith(contacts: c);
+  }
+
+  Future<void> savePerson(Person p) async {
+    final list = [...state.people];
+    final i = list.indexWhere((e) => e.id == p.id);
+    if (i >= 0) {
+      list[i] = p;
+    } else {
+      list.add(p);
+    }
+    await _repo.savePeople(list);
+    state = state.copyWith(people: list);
+  }
+
+  Future<void> deletePerson(String id) async {
+    final list = state.people.where((p) => p.id != id).toList();
+    await _repo.savePeople(list);
+    state = state.copyWith(people: list);
+  }
+
+  /// «أعد توزيع الأسبوع»: يمسح النقل اليدوي لاقتراحات التواصل هذا الأسبوع.
+  Future<void> resetContactWeek(Day anyDay) async {
+    final ws = anyDay.weekStart;
+    final next = {...state.overrides};
+    for (final e in state.overrides.entries.toList()) {
+      final o = e.value;
+      if (!o.itemKey.startsWith('contact:')) continue;
+      if (o.date.isBefore(ws) || o.date.isAfter(ws.add(6))) continue;
+      await _repo.deleteOverride(o.date, o.itemKey);
+      next.remove(e.key);
+    }
+    state = state.copyWith(overrides: next);
+  }
+
+  /// عدّاد خفيف لليوم (الوقفات): خارج النسبة.
+  Future<void> countLight(Day d, String key, int delta) async {
+    final cur = state.logs[recordKey(d, key)];
+    final v = ((cur?.value ?? 0) + delta).clamp(0, 99);
+    await _putLog(
+      (cur ?? ItemLog(date: d, itemKey: key, status: ItemStatus.pending))
+          .copyWith(value: v, category: 'light'),
     );
   }
 

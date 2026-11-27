@@ -25,6 +25,11 @@ class FixedClock extends Clock {
   void refresh() {}
 }
 
+class FridayClock extends FixedClock {
+  @override
+  DateTime build() => DateTime(2026, 11, 27, 9, 48);
+}
+
 Future<void> loadFonts() async {
   Future<void> load(String family, List<String> files) async {
     final loader = FontLoader(family);
@@ -134,10 +139,45 @@ AppData sample() {
         date: d,
         itemKey: 'water',
         status: ItemStatus.pending,
-        value: 2,
+        value: 500,
       ),
     },
-    meta: const {'lastClosed': '2026-11-25'},
+    meta: const {
+      'lastClosed': '2026-11-25',
+      'water.2026-11-26': '330:250,550:250',
+    },
+    people: const [
+      Person(
+        id: 'mom',
+        name: 'أمي',
+        phone: '+966500000000',
+        pinned: true,
+        freq: ContactFreq.weekly,
+        addedAt: Day(2026, 11, 1),
+      ),
+      Person(
+        id: 'khalid',
+        name: 'خالد',
+        relation: Relation.friend,
+        method: ContactMethod.whatsapp,
+        addedAt: Day(2026, 11, 1),
+      ),
+      Person(
+        id: 'saad',
+        name: 'سعد',
+        relation: Relation.friend,
+        giftBudget: 200,
+        occasions: [Occasion(kind: OccasionKind.wedding, month: 11, day: 26)],
+        addedAt: Day(2026, 11, 1),
+      ),
+      Person(
+        id: 'uncle',
+        name: 'عمي أبو فهد',
+        freq: ContactFreq.monthly,
+        addedAt: Day(2026, 11, 1),
+      ),
+    ],
+    contacts: const ContactsConfig(enabled: true),
   );
 }
 
@@ -151,6 +191,8 @@ void main() {
   Future<void> pumpApp(
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
+    bool friday = false,
+    AppData? data,
   }) async {
     tester.view.physicalSize = const Size(390 * 2, 844 * 2);
     tester.view.devicePixelRatio = 2;
@@ -166,8 +208,8 @@ void main() {
               File('assets/defaults/config.json').readAsStringSync(),
             ),
           ),
-          initialDataProvider.overrideWithValue(sample()),
-          clockProvider.overrideWith(FixedClock.new),
+          initialDataProvider.overrideWithValue(data ?? sample()),
+          clockProvider.overrideWith(friday ? FridayClock.new : FixedClock.new),
         ],
         child: const MuttasaApp(notifications: false),
       ),
@@ -252,5 +294,75 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/stats.png'),
     );
+  });
+
+  Future<void> shot(WidgetTester tester, String name) => expectLater(
+    find.byType(MaterialApp),
+    matchesGoldenFile('goldens/$name.png'),
+  );
+
+  testWidgets('فاتت، الماء، البطاقة', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('راجعها').first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'missed_sheet');
+    await tester.tapAt(const Offset(200, 40));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel(RegExp(r'^. من .')).first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'water_sheet');
+  });
+
+  testWidgets('الجمعة', (tester) async {
+    await pumpApp(tester, friday: true);
+    await shot(tester, 'friday_sheet');
+    await tester.tap(find.text('أضفها إلى يومي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'friday_day');
+  });
+
+  testWidgets('الإعدادات والتواصل', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings');
+    await tester.tap(find.text('المظهر'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'appearance');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('التواصل مع الناس'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'contacts_settings');
+    await tester.tap(find.text('الأشخاص'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'contacts_people');
+    await tester.tap(find.text('خالد'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'contacts_edit');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('جدول الأسبوع'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'contacts_week');
+  });
+
+  testWidgets('التهيئة', (tester) async {
+    await pumpApp(tester, data: const AppData());
+    await shot(tester, 'onboard_welcome');
+    await tester.tap(find.text('ابدأ'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_city');
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_day');
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_interests');
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_summary');
   });
 }

@@ -16,6 +16,8 @@ class AppData {
     this.carries = const [],
     this.logs = const {},
     this.meta = const {},
+    this.people = const [],
+    this.contacts = const ContactsConfig(),
   });
 
   final UserProfile? profile;
@@ -26,6 +28,8 @@ class AppData {
   final List<CarryOver> carries;
   final Map<String, ItemLog> logs;
   final Map<String, String> meta;
+  final List<Person> people;
+  final ContactsConfig contacts;
 
   bool get onboarded => profile != null;
 
@@ -38,6 +42,8 @@ class AppData {
     List<CarryOver>? carries,
     Map<String, ItemLog>? logs,
     Map<String, String>? meta,
+    List<Person>? people,
+    ContactsConfig? contacts,
   }) => AppData(
     profile: profile ?? this.profile,
     settings: settings ?? this.settings,
@@ -47,6 +53,8 @@ class AppData {
     carries: carries ?? this.carries,
     logs: logs ?? this.logs,
     meta: meta ?? this.meta,
+    people: people ?? this.people,
+    contacts: contacts ?? this.contacts,
   );
 }
 
@@ -115,8 +123,23 @@ class Repository {
         for (final e in kv.entries)
           if (e.key.startsWith('meta.')) e.key.substring(5): e.value,
       },
+      people: kv['people'] == null
+          ? const []
+          : _people(jsonDecode(kv['people']!) as List),
+      contacts: kv['contacts'] == null
+          ? const ContactsConfig()
+          : ContactsConfig.fromJson(_decode(kv['contacts']!)),
     );
   }
+
+  static List<Person> _people(List l) => l
+      .map((e) => Person.fromJson((e as Map).cast<String, Object?>()))
+      .toList();
+
+  Future<void> savePeople(List<Person> p) =>
+      setKv('people', jsonEncode(p.map((e) => e.toJson()).toList()));
+  Future<void> saveContacts(ContactsConfig c) =>
+      setKv('contacts', jsonEncode(c.toJson()));
 
   Future<void> setKv(String key, String value) => db
       .into(db.kvEntries)
@@ -252,6 +275,8 @@ class Repository {
     'carries': d.carries.map((c) => c.toJson()).toList(),
     'logs': d.logs.values.map((l) => l.toJson()).toList(),
     'meta': d.meta,
+    'people': d.people.map((p) => p.toJson()).toList(),
+    'contacts': d.contacts.toJson(),
   };
 
   /// يقرأ النسخة ويتحقق منها دون أن يكتب شيئًا.
@@ -287,6 +312,12 @@ class Repository {
       meta: ((j['meta'] as Map?) ?? const {}).map(
         (k, v) => MapEntry(k as String, v as String),
       ),
+      people: _people((j['people'] as List?) ?? const []),
+      contacts: j['contacts'] == null
+          ? const ContactsConfig()
+          : ContactsConfig.fromJson(
+              (j['contacts']! as Map).cast<String, Object?>(),
+            ),
     );
   }
 
@@ -296,6 +327,8 @@ class Repository {
       await wipe();
       if (d.profile != null) await saveProfile(d.profile!);
       await saveSettings(d.settings);
+      await savePeople(d.people);
+      await saveContacts(d.contacts);
       for (final e in d.meta.entries) {
         await setMeta(e.key, e.value);
       }

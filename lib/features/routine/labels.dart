@@ -1,6 +1,8 @@
 import 'package:schedule_core/schedule_core.dart';
 
-String recurrenceLabel(Recurrence r) => switch (r) {
+String recurrenceLabel(Recurrence r) => nums(_recurrenceLabel(r));
+
+String _recurrenceLabel(Recurrence r) => switch (r) {
   Daily() => 'كل يوم',
   Weekdays(:final days) => fmtWeekdays(days),
   TimesPerWeek(:final n) =>
@@ -36,7 +38,10 @@ String ruleIcon(RuleConfig c) => switch (c) {
   RemindersConfig() => 'water',
 };
 
-String ruleSummary(RuleConfig c, {String city = ''}) {
+String ruleSummary(RuleConfig c, {String city = ''}) =>
+    nums(_ruleSummary(c, city: city));
+
+String _ruleSummary(RuleConfig c, {String city = ''}) {
   switch (c) {
     case PrayersConfig(:final sunnah):
       return [

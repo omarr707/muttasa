@@ -4,6 +4,7 @@
 /// والسجلات وتعيد خطة اليوم. نفس المدخلات تعطي نفس اليوم دائمًا.
 library;
 
+export 'src/contacts.dart';
 export 'src/day.dart';
 export 'src/format.dart';
 export 'src/recurrence.dart';

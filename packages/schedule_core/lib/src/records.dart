@@ -51,6 +51,8 @@ class OneOff {
     this.window = Window.any,
     this.habitKey,
     this.note,
+    this.icon,
+    this.preferred,
   });
 
   final String id;
@@ -67,6 +69,12 @@ class OneOff {
   final String? habitKey;
   final String? note;
 
+  /// رمز البطاقة (مثل أعمال الجمعة). فارغ = حسب النوع.
+  final String? icon;
+
+  /// وقت مفضل للمرن.
+  final int? preferred;
+
   String get itemKey => 'once:$id';
 
   Map<String, Object?> toJson() => {
@@ -79,6 +87,8 @@ class OneOff {
     'window': window.name,
     'habitKey': habitKey,
     'note': note,
+    'icon': icon,
+    'preferred': preferred,
   };
 
   factory OneOff.fromJson(Map<String, Object?> j) => OneOff(
@@ -91,6 +101,8 @@ class OneOff {
     window: Window.values.byName((j['window'] as String?) ?? 'any'),
     habitKey: j['habitKey'] as String?,
     note: j['note'] as String?,
+    icon: j['icon'] as String?,
+    preferred: j['preferred'] as int?,
   );
 }
 

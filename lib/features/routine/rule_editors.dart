@@ -217,7 +217,7 @@ class _WorkEditorState extends State<_WorkEditor> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               'الوردية تعبر منتصف الليل. ننام بعدها 7 ساعات تبدأ بعد نصف ساعة من نهايتها.',
-              style: TextStyle(color: c.ink2, fontSize: 13),
+              style: TextStyle(color: c.ink2, fontSize: 12.5),
             ),
           ),
         SwitchListTile(
@@ -275,7 +275,7 @@ class _WorkEditorState extends State<_WorkEditor> {
           padding: const EdgeInsets.only(top: 12),
           child: Text(
             'الدوام يحجز الوقت فقط. الحضور اختياري وخارج نسبة الإنجاز.',
-            style: TextStyle(color: c.muted, fontSize: 12.5),
+            style: TextStyle(color: c.muted, fontSize: 12),
           ),
         ),
       ],
@@ -589,7 +589,7 @@ class _FlexEditorState extends State<_FlexEditor> {
           ),
           Text(
             'نوزّعها على الأسبوع ونختار الأيام اللي فيها مكان.',
-            style: TextStyle(color: c.muted, fontSize: 12.5),
+            style: TextStyle(color: c.muted, fontSize: 12),
           ),
         ],
         const FieldLabel('مدة الجلسة'),
@@ -697,7 +697,7 @@ class _FlexEditorState extends State<_FlexEditor> {
                 ),
                 Text(
                   '$_startPage',
-                  style: const TextStyle(fontFamily: fontDisplay, fontSize: 20),
+                  style: const TextStyle(fontFamily: fontDisplay, fontSize: 17),
                 ),
                 IconButton(
                   onPressed: _startPage > 1
@@ -793,8 +793,8 @@ class _PrayersEditorState extends ConsumerState<_PrayersEditor> {
                       fmtTime(m),
                       style: const TextStyle(
                         fontFamily: fontDisplay,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
                       ),
                     ),
                   ],
@@ -806,13 +806,13 @@ class _PrayersEditorState extends ConsumerState<_PrayersEditor> {
           padding: const EdgeInsets.only(top: 8),
           child: Text(
             'مواقيت اليوم. طريقة الحساب والمدينة من الإعدادات ← الإسلام.',
-            style: TextStyle(color: c.muted, fontSize: 12.5),
+            style: TextStyle(color: c.muted, fontSize: 12),
           ),
         ),
         const FieldLabel('السنن الرواتب'),
         Text(
           'تظهر داخل بطاقة الصلاة نفسها كبنود فرعية تأكدها منها، ولا تدخل في نسبة الإنجاز.',
-          style: TextStyle(color: c.ink2, fontSize: 13),
+          style: TextStyle(color: c.ink2, fontSize: 12.5),
         ),
         const SizedBox(height: 6),
         SwitchListTile(

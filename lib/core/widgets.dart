@@ -94,8 +94,8 @@ class PillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final bg = soft ? c.card : c.pill;
-    final fg = soft ? c.ink : c.pillInk;
+    final bg = soft ? c.card : c.accent;
+    final fg = soft ? c.ink : c.onAccent;
     final child = Row(
       mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -108,10 +108,10 @@ class PillButton extends StatelessWidget {
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: T.label.copyWith(
               color: fg,
-              fontWeight: FontWeight.w700,
-              fontSize: dense ? 13 : 15,
+              fontWeight: FontWeight.w600,
+              fontSize: dense ? 13 : 14,
             ),
           ),
         ),
@@ -129,11 +129,11 @@ class PillButton extends StatelessWidget {
           customBorder: const StadiumBorder(),
           onTap: onPressed,
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: dense ? 36 : 48),
+            constraints: BoxConstraints(minHeight: dense ? 34 : 44),
             child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: dense ? 14 : 20,
-                vertical: dense ? 6 : 10,
+                horizontal: dense ? 14 : 18,
+                vertical: dense ? 4 : 8,
               ),
               child: Center(widthFactor: expand ? null : 1, child: child),
             ),
@@ -155,18 +155,16 @@ class PrimaryButton extends StatelessWidget {
     final c = context.c;
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 50,
       child: FilledButton(
         style: FilledButton.styleFrom(
           backgroundColor: c.accent,
-          foregroundColor: c.accentInk,
+          foregroundColor: c.onAccent,
           disabledBackgroundColor: c.line,
-          shape: const StadiumBorder(),
-          textStyle: const TextStyle(
-            fontFamily: fontDisplay,
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(R.md),
           ),
+          textStyle: T.section.copyWith(fontSize: 15),
         ),
         onPressed: onPressed,
         child: Text(label),
@@ -177,7 +175,7 @@ class PrimaryButton extends StatelessWidget {
 
 /// مفتاح تبديل كبسولي (الجدول الزمني | الإحصائيات).
 /// تبويبات بخط سفلي، مثل «الجدول الزمني | الإحصائيات» في النموذج.
-class UnderlineTabs<T> extends StatelessWidget {
+class UnderlineTabs<V> extends StatelessWidget {
   const UnderlineTabs({
     super.key,
     required this.values,
@@ -185,10 +183,10 @@ class UnderlineTabs<T> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
   });
-  final List<T> values;
+  final List<V> values;
   final List<String> labels;
-  final T selected;
-  final ValueChanged<T> onChanged;
+  final V selected;
+  final ValueChanged<V> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -205,21 +203,24 @@ class UnderlineTabs<T> extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: () => onChanged(values[i]),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(2, 8, 2, 8),
+                padding: const EdgeInsets.fromLTRB(2, 10, 2, 8),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      width: 2.5,
-                      color: values[i] == selected ? c.ink : Colors.transparent,
+                      width: 2,
+                      color: values[i] == selected
+                          ? c.accent
+                          : Colors.transparent,
                     ),
                   ),
                 ),
                 child: Text(
                   labels[i],
-                  style: TextStyle(
-                    fontFamily: fontDisplay,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                  style: T.label.copyWith(
+                    fontSize: 13,
+                    fontWeight: values[i] == selected
+                        ? FontWeight.w600
+                        : FontWeight.w500,
                     color: values[i] == selected ? c.ink : c.muted,
                   ),
                 ),
@@ -232,7 +233,7 @@ class UnderlineTabs<T> extends StatelessWidget {
   }
 }
 
-class Segmented<T> extends StatelessWidget {
+class Segmented<V> extends StatelessWidget {
   const Segmented({
     super.key,
     required this.values,
@@ -241,21 +242,20 @@ class Segmented<T> extends StatelessWidget {
     required this.onChanged,
     this.small = false,
   });
-  final List<T> values;
+  final List<V> values;
   final List<String> labels;
-  final T selected;
-  final ValueChanged<T> onChanged;
+  final V selected;
+  final ValueChanged<V> onChanged;
   final bool small;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return Container(
-      padding: EdgeInsets.all(small ? 3 : 4),
+      padding: EdgeInsets.all(small ? 3 : 3),
       decoration: BoxDecoration(
-        color: c.card,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: c.line),
+        color: c.sunk,
+        borderRadius: BorderRadius.circular(small ? 999 : R.md - 2),
       ),
       child: Row(
         mainAxisSize: small ? MainAxisSize.min : MainAxisSize.max,
@@ -271,22 +271,31 @@ class Segmented<T> extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     padding: EdgeInsets.symmetric(
-                      vertical: small ? 4 : 7,
+                      vertical: small ? 4 : 8,
                       horizontal: small ? 12 : 6,
                     ),
                     decoration: BoxDecoration(
                       color: values[i] == selected
-                          ? c.accent
+                          ? c.card
                           : Colors.transparent,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(
+                        small ? 999 : R.sm + 2,
+                      ),
+                      border: values[i] == selected
+                          ? Border.all(color: c.line)
+                          : null,
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       labels[i],
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: small ? 12.5 : 13.5,
-                        color: values[i] == selected ? c.accentInk : c.muted,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.label.copyWith(
+                        fontWeight: values[i] == selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        fontSize: 13,
+                        color: values[i] == selected ? c.ink : c.muted,
                       ),
                     ),
                   ),
@@ -305,19 +314,10 @@ class SectionTitle extends StatelessWidget {
   final Widget? trailing;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(0, 18, 0, 8),
+    padding: const EdgeInsets.fromLTRB(0, 20, 0, 8),
     child: Row(
       children: [
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(
-              fontFamily: fontDisplay,
-              fontWeight: FontWeight.w700,
-              fontSize: 17,
-            ),
-          ),
-        ),
+        Expanded(child: Text(text, style: T.section)),
         ?trailing,
       ],
     ),
@@ -348,7 +348,7 @@ class MCard extends StatelessWidget {
     return Material(
       color: color ?? c.card,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(R.md),
         side: BorderSide(color: border ?? c.line, width: dashed ? 1.5 : 1),
       ),
       clipBehavior: Clip.antiAlias,
@@ -390,11 +390,11 @@ Future<int?> pickTime(
             for (final s in items)
               Center(
                 child: Text(
-                  s,
-                  style: TextStyle(
-                    fontSize: 20,
+                  nums(s),
+                  style: T.screenTitle.copyWith(
+                    fontSize: 19,
                     color: c.ink,
-                    fontFamily: fontDisplay,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -407,13 +407,7 @@ Future<int?> pickTime(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 17,
-                ),
-              ),
+              Text(title, style: T.screenTitle),
               const SizedBox(height: 8),
               SizedBox(
                 height: 180,
@@ -471,30 +465,26 @@ class TimeField extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(R.md),
       onTap: () async {
         final v = await pickTime(context, initial: value, title: label);
         if (v != null) onChanged(v);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
           color: c.card,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(R.md),
           border: Border.all(color: c.line),
         ),
         child: Row(
           children: [
             Expanded(
-              child: Text(label, style: TextStyle(color: c.ink2)),
+              child: Text(label, style: T.body.copyWith(color: c.ink2)),
             ),
             Text(
               fmtTime(value),
-              style: const TextStyle(
-                fontFamily: fontDisplay,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
+              style: T.body.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 6),
             Icon(Icons.schedule, size: 18, color: c.muted),
@@ -506,7 +496,7 @@ class TimeField extends StatelessWidget {
 }
 
 /// شرائح اختيار من قائمة.
-class ChoiceChips<T> extends StatelessWidget {
+class ChoiceChips<V> extends StatelessWidget {
   const ChoiceChips({
     super.key,
     required this.values,
@@ -514,10 +504,10 @@ class ChoiceChips<T> extends StatelessWidget {
     required this.selected,
     required this.onSelected,
   });
-  final List<T> values;
-  final String Function(T) label;
-  final bool Function(T) selected;
-  final ValueChanged<T> onSelected;
+  final List<V> values;
+  final String Function(V) label;
+  final bool Function(V) selected;
+  final ValueChanged<V> onSelected;
 
   @override
   Widget build(BuildContext context) => Wrap(
@@ -581,9 +571,259 @@ class FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 16, bottom: 8),
-    child: Text(
-      text,
-      style: TextStyle(fontWeight: FontWeight.w700, color: context.c.ink2),
-    ),
+    child: Text(text, style: T.label.copyWith(color: context.c.muted)),
   );
+}
+
+/// مجموعة إعدادات: عنوان صغير فوق بطاقة بزوايا كبيرة وصفوف مفصولة بخط.
+class SettingsGroup extends StatelessWidget {
+  const SettingsGroup({super.key, this.title, required this.children});
+  final String? title;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (title != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(4, 20, 4, 8),
+            child: Text(title!, style: T.label.copyWith(color: c.muted)),
+          ),
+        Container(
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(R.lg),
+            border: Border.all(color: c.line),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0)
+                  Divider(height: 1, indent: 16, endIndent: 16, color: c.line),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// صف إعداد: عنوان، وصف أو قيمة، وسهم أو مفتاح.
+class SettingsRow extends StatelessWidget {
+  const SettingsRow({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.value,
+    this.icon,
+    this.onTap,
+    this.toggle,
+    this.onToggle,
+    this.trailing,
+    this.danger = false,
+  });
+  final String title;
+  final String? subtitle;
+  final String? value;
+  final IconData? icon;
+  final VoidCallback? onTap;
+  final bool? toggle;
+  final ValueChanged<bool>? onToggle;
+  final Widget? trailing;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final tap = toggle != null ? () => onToggle?.call(!toggle!) : onTap;
+    return Semantics(
+      button: tap != null,
+      toggled: toggle,
+      child: InkWell(
+        onTap: tap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  IconSquare(icon!, size: 32, fg: danger ? c.amber : c.ink2),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: T.body.copyWith(
+                          color: danger ? c.amber : c.ink,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: T.meta.copyWith(color: c.muted),
+                        ),
+                    ],
+                  ),
+                ),
+                if (value != null) ...[
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Text(
+                      value!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.meta.copyWith(color: c.muted, fontSize: 13),
+                    ),
+                  ),
+                ],
+                if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+                if (toggle != null)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 8),
+                    child: Transform.scale(
+                      scale: .85,
+                      child: Switch(value: toggle!, onChanged: onToggle),
+                    ),
+                  )
+                else if (onTap != null)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 4),
+                    child: Icon(Icons.chevron_left, size: 20, color: c.muted),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// مربع الأيقونة في البطاقات: ٣٤ بخلفية غائرة.
+class IconSquare extends StatelessWidget {
+  const IconSquare(this.icon, {super.key, this.bg, this.fg, this.size = 34});
+  final IconData icon;
+  final Color? bg;
+  final Color? fg;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: bg ?? c.sunk,
+        borderRadius: BorderRadius.circular(R.sm + 2),
+      ),
+      child: Icon(icon, size: size * .55, color: fg ?? c.ink2),
+    );
+  }
+}
+
+/// عنوان ورقة سفلية مع وصف اختياري.
+class SheetHeader extends StatelessWidget {
+  const SheetHeader(this.title, {super.key, this.subtitle, this.trailing});
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: T.screenTitle),
+                if (subtitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      subtitle!,
+                      style: T.meta.copyWith(color: c.muted, fontSize: 13),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+/// زر صغير محدد الإطار داخل البطاقات والأوراق.
+class SmallButton extends StatelessWidget {
+  const SmallButton({
+    super.key,
+    required this.label,
+    this.onTap,
+    this.primary = false,
+    this.icon,
+    this.selected = false,
+  });
+  final String label;
+  final VoidCallback? onTap;
+  final bool primary;
+  final bool selected;
+  final IconData? icon;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final bg = primary ? c.accent : (selected ? c.accentSoft : c.card);
+    final fg = primary ? c.onAccent : (selected ? c.accent : c.ink);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: primary
+              ? BorderSide.none
+              : BorderSide(color: selected ? c.accent : c.line),
+        ),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 16, color: fg),
+                  const SizedBox(width: 4),
+                ],
+                Text(label, style: T.label.copyWith(color: fg, fontSize: 12.5)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -74,6 +74,7 @@ NotifyKind? _kindFor(PlanItem i) {
     case ItemKind.quran:
     case ItemKind.habit:
     case ItemKind.meal:
+    case ItemKind.contact:
       return NotifyKind.routine;
     case ItemKind.work:
       return null; // لا تنبيه للدوام والنوم.

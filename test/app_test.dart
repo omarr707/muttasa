@@ -115,27 +115,33 @@ void main() {
     expect(find.text('مُتَّسَع'), findsOneWidget);
     await tester.tap(find.text('ابدأ'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'عمر');
-    await tester.tap(find.text('التالي'));
+    expect(find.text('في أي مدينة تعيش؟'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'الرياض');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('السعودية'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('التالي'));
-    await tester.pumpAndSettle();
-    expect(find.text('الإسلام'), findsOneWidget);
-    await tester.tap(find.text('التالي'));
+    await tester.tap(find.text('الرياض').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
-    expect(find.text('تشكيلتي'), findsOneWidget);
+    expect(find.text('كيف يمشي يومك؟'), findsOneWidget);
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('جهّز جدولي'));
+    expect(find.text('وش تبغى يكون في يومك؟'), findsOneWidget);
+    await tester.tap(find.text('الرياضة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    expect(find.text('جدولك جاهز'), findsOneWidget);
+    // نطفئ طلب الإذن في الاختبار.
+    await tester.tap(find.text('ذكّرني بالمهام'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('افتح يومي'));
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
-    // نافذة إذن التنبيهات تظهر قبل الانتقال.
-    await tester.tap(find.text('لاحقًا'));
-    await tester.pumpAndSettle();
+    // يوم الجمعة تظهر ورقة أعمال الجمعة مرة واحدة.
+    if (find.text('ليس الآن').evaluate().isNotEmpty) {
+      await tester.tap(find.text('ليس الآن'));
+      await tester.pumpAndSettle();
+    }
 
     expect(find.bySemanticsLabel(RegExp('^إنجاز اليوم')), findsOneWidget);
     expect(find.text('يومي'), findsOneWidget);
@@ -143,8 +149,26 @@ void main() {
     expect(data.profile!.city, 'الرياض');
     expect(
       data.rules.map((r) => r.key),
-      containsAll(['prayers', 'adhkar', 'quran:wird', 'reminders']),
+      containsAll([
+        'prayers',
+        'adhkar',
+        'quran:wird',
+        'reminders',
+        'habit:walk',
+        'work',
+      ]),
     );
+    expect(data.contacts.enabled, isTrue);
+
+    // الإعدادات تبويب رابع، والتواصل داخلها.
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    expect(find.text('التواصل مع الناس'), findsOneWidget);
+    await tester.tap(find.text('التواصل مع الناس'));
+    await tester.pumpAndSettle();
+    expect(find.text('كم مرة في الأسبوع؟'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
 
     // «روتيني» و«أهدافي» تفتح.
     await tester.tap(find.text('روتيني'));

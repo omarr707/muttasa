@@ -51,11 +51,11 @@ class StatsView extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${soFar.percent}%',
+                    '${nums(soFar.percent)}٪',
                     style: const TextStyle(
                       fontFamily: fontDisplay,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 26,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 19,
                     ),
                   ),
                   Text(
@@ -89,7 +89,7 @@ class StatsView extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             Text(
-                              future ? '' : '${pr.percent}%',
+                              future ? '' : '${nums(pr.percent)}٪',
                               style: TextStyle(fontSize: 11, color: c.muted),
                             ),
                             const SizedBox(height: 4),
@@ -176,7 +176,7 @@ class StatsView extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     'تقرير الالتزام الشهري والسنوي يجي مع المرحلة الثانية.',
-                    style: TextStyle(color: c.ink2, fontSize: 13),
+                    style: TextStyle(color: c.ink2, fontSize: 12.5),
                   ),
                 ),
               ],

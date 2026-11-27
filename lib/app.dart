@@ -102,11 +102,28 @@ class _MuttasaAppState extends ConsumerState<MuttasaApp>
     ref.listen(engineProvider, (_, _) => _scheduleSoon());
     ref.listen(todayProvider, (_, _) => _onOpen());
     final router = ref.watch(routerProvider);
+    final s = ref.watch(appDataProvider.select((d) => d.settings));
+    useArabicDigits = s.arabicDigits;
     return MaterialApp.router(
       title: 'مُتَّسَع',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
+      themeMode: switch (s.theme) {
+        ThemePref.system => ThemeMode.system,
+        ThemePref.light => ThemeMode.light,
+        ThemePref.dark => ThemeMode.dark,
+      },
+      // حجم الخط من الإعدادات، مع سقف لتكبير النظام حتى لا تلتف العناوين.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        final system = mq.textScaler.scale(10) / 10;
+        final scale = s.fontSize.factor * system.clamp(.85, 1.1);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        );
+      },
       locale: const Locale('ar'),
       supportedLocales: const [Locale('ar')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

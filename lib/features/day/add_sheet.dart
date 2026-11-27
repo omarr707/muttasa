@@ -81,8 +81,8 @@ Future<void> showAddSheet(BuildContext context, WidgetRef ref, Day date) async {
                 'وش تبغى تضيف؟',
                 style: TextStyle(
                   fontFamily: fontDisplay,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
                 ),
               ),
               Text(
@@ -113,8 +113,8 @@ Future<void> showAddSheet(BuildContext context, WidgetRef ref, Day date) async {
                             Text(
                               t.title,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
                               ),
                             ),
                             Text(
@@ -206,8 +206,8 @@ class _AddFormState extends ConsumerState<_AddForm> {
               widget.kind.label,
               style: const TextStyle(
                 fontFamily: fontDisplay,
-                fontWeight: FontWeight.w700,
-                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                fontSize: 17,
               ),
             ),
             if (isHabit) ...[
@@ -248,7 +248,9 @@ class _AddFormState extends ConsumerState<_AddForm> {
               children: [
                 ChoiceChip(
                   label: Text(
-                    '${arabicWeekdays[_date.weekday]} ${_date.day}/${_date.month}',
+                    nums(
+                      '${arabicWeekdays[_date.weekday]} ${_date.day}/${_date.month}',
+                    ),
                   ),
                   selected: true,
                   showCheckmark: false,
@@ -314,7 +316,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Text(
                   'الفترات والأحداث خارج نسبة الإنجاز.',
-                  style: TextStyle(color: c.muted, fontSize: 12.5),
+                  style: TextStyle(color: c.muted, fontSize: 12),
                 ),
               ),
             const SizedBox(height: 20),

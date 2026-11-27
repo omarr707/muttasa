@@ -36,8 +36,8 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
               'روتيني',
               style: TextStyle(
                 fontFamily: fontDisplay,
-                fontWeight: FontWeight.w700,
-                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                fontSize: 19,
               ),
             ),
             Text(
@@ -230,13 +230,13 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
                         Text(
                           e.title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
                         ),
                         Text(
                           e.description,
-                          style: TextStyle(fontSize: 12.5, color: c.ink2),
+                          style: TextStyle(fontSize: 12, color: c.ink2),
                         ),
                       ],
                     ),
@@ -344,14 +344,14 @@ class _RuleTile extends ConsumerWidget {
                   Text(
                     ruleTitle(cfg),
                     style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                       color: paused ? c.muted : c.ink,
                     ),
                   ),
                   Text(
                     ruleSummary(cfg, city: city),
-                    style: TextStyle(fontSize: 12.5, color: c.ink2),
+                    style: TextStyle(fontSize: 12, color: c.ink2),
                   ),
                   if (track != null || paused || starts)
                     Padding(
@@ -395,8 +395,8 @@ class _RuleTile extends ConsumerWidget {
               child: Text(
                 ruleTitle(rule.config),
                 style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
                 ),
               ),
             ),
@@ -540,11 +540,11 @@ class _SleepTile extends ConsumerWidget {
                 children: [
                   const Text(
                     'النوم',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   Text(
                     'الصحيان ${fmtTime(profile.wake)} · النوم ${fmtTime(profile.sleep)}',
-                    style: TextStyle(fontSize: 12.5, color: c.ink2),
+                    style: TextStyle(fontSize: 12, color: c.ink2),
                   ),
                   Text(
                     'نحجز وقت النوم ولا نحط فيه شي',

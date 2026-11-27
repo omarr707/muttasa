@@ -38,8 +38,8 @@ class GoalsScreen extends ConsumerWidget {
               'أهدافي',
               style: TextStyle(
                 fontFamily: fontDisplay,
-                fontWeight: FontWeight.w700,
-                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                fontSize: 19,
               ),
             ),
             Text(
@@ -58,7 +58,7 @@ class GoalsScreen extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       'الأهداف بالنتيجة والموعد، والختمة والادخار، تجي مع المرحلة الثانية. الحين تابع عاداتك تحت.',
-                      style: TextStyle(color: c.ink2, fontSize: 13),
+                      style: TextStyle(color: c.ink2, fontSize: 12.5),
                     ),
                   ),
                 ],
@@ -114,13 +114,13 @@ class _HabitCard extends ConsumerWidget {
                         cfg.title,
                         style: const TextStyle(
                           fontFamily: fontDisplay,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
                         ),
                       ),
                       Text(
                         ruleSummary(cfg),
-                        style: TextStyle(fontSize: 12.5, color: c.ink2),
+                        style: TextStyle(fontSize: 12, color: c.ink2),
                       ),
                     ],
                   ),
@@ -144,19 +144,19 @@ class _HabitCard extends ConsumerWidget {
                   fmtCount(w.done, w.target),
                   style: const TextStyle(
                     fontFamily: fontDisplay,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 17,
                   ),
                 ),
                 Text(
                   '  هذا الأسبوع',
-                  style: TextStyle(color: c.muted, fontSize: 12.5),
+                  style: TextStyle(color: c.muted, fontSize: 12),
                 ),
                 const Spacer(),
                 if (paused)
                   Text(
                     'موقوفة مؤقتًا',
-                    style: TextStyle(color: c.warn, fontSize: 12.5),
+                    style: TextStyle(color: c.warn, fontSize: 12),
                   ),
               ],
             ),
@@ -188,7 +188,7 @@ class _HabitCard extends ConsumerWidget {
                                 fontSize: 11.5,
                                 color: d == today ? c.ink : c.muted,
                                 fontWeight: d == today
-                                    ? FontWeight.w700
+                                    ? FontWeight.w600
                                     : FontWeight.w500,
                               ),
                             ),
@@ -226,11 +226,11 @@ class _HabitCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  '${w.unplaced} ما لقت وقت',
+                  '${nums(w.unplaced)} ما لقت وقت',
                   style: TextStyle(
                     color: c.warn,
                     fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                    fontSize: 12.5,
                   ),
                 ),
               ),

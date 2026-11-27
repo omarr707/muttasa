@@ -66,8 +66,8 @@ Future<bool> saveWithPreview(
                       'معاينة التغييرات',
                       style: TextStyle(
                         fontFamily: fontDisplay,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
                       ),
                     ),
                     Text(
@@ -78,7 +78,7 @@ Future<bool> saveWithPreview(
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'فيه $manualDays أيام عدّلتها بيدك. تعديلاتك والمنجز يبقون كما هم.',
+                          'فيه ${nums(manualDays)} أيام عدّلتها بيدك. تعديلاتك والمنجز يبقون كما هم.',
                           style: TextStyle(
                             color: c.warn,
                             fontWeight: FontWeight.w600,
@@ -111,7 +111,7 @@ Future<bool> saveWithPreview(
                               Expanded(
                                 child: Text(
                                   ch.label,
-                                  style: const TextStyle(fontSize: 13.5),
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                             ],

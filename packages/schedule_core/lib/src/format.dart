@@ -1,31 +1,68 @@
 import 'day.dart';
 
-/// تنسيق عربي بأرقام لاتينية 0-9 داخل النص، مثل «5:35 م».
-/// دالة واحدة للوقت والعدد كما تنص الوثيقة.
-String fmtTime(int minute) {
+/// شكل الأرقام في النصوص: هندية «١٢٣» أو لاتينية «123».
+/// التطبيق يضبطها من إعدادات المظهر، والمحرك يبقى على اللاتينية في اختباراته.
+bool useArabicDigits = false;
+
+const _arabicIndic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+
+/// يحوّل كل الأرقام اللاتينية في النص حسب الإعداد الحالي.
+String nums(Object? v) {
+  final s = '$v';
+  if (!useArabicDigits) return s;
+  final b = StringBuffer();
+  final u = s.codeUnits;
+  bool digit(int i) => i >= 0 && i < u.length && u[i] >= 48 && u[i] <= 57;
+  for (var i = 0; i < u.length; i++) {
+    final c = u[i];
+    if (digit(i)) {
+      b.write(_arabicIndic[c - 48]);
+    } else if (c == 46 && digit(i - 1) && digit(i + 1)) {
+      b.write('٫'); // فاصلة عشرية بين رقمين فقط.
+    } else {
+      b.writeCharCode(c);
+    }
+  }
+  return b.toString();
+}
+
+(int, int, bool) _hm(int minute) {
   var m = minute % minutesPerDay;
   if (m < 0) m += minutesPerDay;
   final h24 = m ~/ 60;
-  final mm = m % 60;
-  final pm = h24 >= 12;
   var h = h24 % 12;
   if (h == 0) h = 12;
-  return '$h:${mm.toString().padLeft(2, '0')} ${pm ? 'م' : 'ص'}';
+  return (h, m % 60, h24 >= 12);
 }
 
-/// «5:35 م إلى 6:05 م».
-String fmtRange(int start, int end) => '${fmtTime(start)} إلى ${fmtTime(end)}';
+/// «5:35 م».
+String fmtTime(int minute) {
+  final (h, mm, pm) = _hm(minute);
+  return nums('$h:${mm.toString().padLeft(2, '0')} ${pm ? 'م' : 'ص'}');
+}
+
+/// «5:19–5:39 ص» إذا اتفق الطرفان في الفترة، وإلا «11:48 ص–12:33 م».
+String fmtRange(int start, int end) {
+  final (h1, m1, p1) = _hm(start);
+  final (h2, m2, p2) = _hm(end);
+  String t(int h, int m) => '$h:${m.toString().padLeft(2, '0')}';
+  String p(bool pm) => pm ? 'م' : 'ص';
+  if (p1 == p2) return nums('${t(h1, m1)}–${t(h2, m2)} ${p(p2)}');
+  return nums('${t(h1, m1)} ${p(p1)}–${t(h2, m2)} ${p(p2)}');
+}
 
 /// الساعة فقط للعمود الجانبي: «5 م».
 String fmtHour(int minute) {
   final h24 = (minute % minutesPerDay) ~/ 60;
   var h = h24 % 12;
   if (h == 0) h = 12;
-  return '$h ${h24 >= 12 ? 'م' : 'ص'}';
+  return nums('$h ${h24 >= 12 ? 'م' : 'ص'}');
 }
 
 /// المدة بالعربية: «10 دقائق»، «ساعة»، «ساعة ونص»، «ساعتين».
-String fmtDuration(int minutes) {
+String fmtDuration(int minutes) => nums(_duration(minutes));
+
+String _duration(int minutes) {
   if (minutes < 60) return '$minutes ${_minuteWord(minutes)}';
   final h = minutes ~/ 60;
   final r = minutes % 60;
@@ -46,7 +83,7 @@ String fmtDuration(int minutes) {
 String _minuteWord(int n) => (n >= 3 && n <= 10) ? 'دقائق' : 'دقيقة';
 
 /// «5 من 18».
-String fmtCount(int done, int total) => '$done من $total';
+String fmtCount(int done, int total) => nums('$done من $total');
 
 const arabicWeekdays = {
   DateTime.saturday: 'السبت',
@@ -85,7 +122,7 @@ const arabicMonths = [
 
 /// «الخميس 26 نوفمبر».
 String fmtDayLong(Day d) =>
-    '${arabicWeekdays[d.weekday]} ${d.day} ${arabicMonths[d.month - 1]}';
+    nums('${arabicWeekdays[d.weekday]} ${d.day} ${arabicMonths[d.month - 1]}');
 
 /// قائمة أيام الأسبوع بترتيب يبدأ بالسبت.
 const weekOrder = [

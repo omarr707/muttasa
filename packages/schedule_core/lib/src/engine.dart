@@ -1,3 +1,4 @@
+import 'contacts.dart';
 import 'day.dart';
 import 'prayer.dart';
 import 'plan.dart';
@@ -16,6 +17,8 @@ class EngineInput {
     this.overrides = const {},
     this.carries = const [],
     this.logs = const {},
+    this.people = const [],
+    this.contacts = const ContactsConfig(),
     required this.prayers,
     required this.today,
     required this.nowMinute,
@@ -32,6 +35,10 @@ class EngineInput {
 
   /// بمفتاح [recordKey].
   final Map<String, ItemLog> logs;
+
+  /// قائمة التواصل وإعداداتها.
+  final List<Person> people;
+  final ContactsConfig contacts;
 
   /// مواقيت اليوم. لمن اختار «بدون» دين تُستخدم مراسٍ محايدة.
   final DayPrayers Function(Day) prayers;
@@ -56,6 +63,8 @@ class EngineInput {
     overrides: overrides ?? this.overrides,
     carries: carries ?? this.carries,
     logs: logs ?? this.logs,
+    people: people,
+    contacts: contacts,
     prayers: prayers,
     today: today ?? this.today,
     nowMinute: nowMinute ?? this.nowMinute,
@@ -82,6 +91,7 @@ class ScheduleEngine {
   final _dayCache = <Day, DayPlan>{};
   final _baseCache = <Day, DayPlan>{};
   final _weekCache = <Day, Map<String, Set<Day>>>{};
+  final _contactCache = <Day, Map<Day, List<Person>>>{};
 
   UserProfile get _p => input.profile;
 
@@ -439,9 +449,11 @@ class ScheduleEngine {
           ruleKey: o.habitKey,
           title: o.title,
           subtitle: o.note,
-          icon: o.kind == OneOffKind.habitSession ? 'star' : 'check',
+          icon:
+              o.icon ?? (o.kind == OneOffKind.habitSession ? 'star' : 'check'),
           duration: o.duration,
           window: o.window,
+          preferred: o.preferred,
           track: TrackMode.confirm,
           category: o.kind == OneOffKind.habitSession ? 'habits' : 'tasks',
           isExtra: o.kind == OneOffKind.habitSession,
@@ -471,6 +483,7 @@ class ScheduleEngine {
     for (final r in flexRules.where((r) => r.kind == RuleKind.habit)) {
       queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
     }
+    if (withWeekly) queue.addAll(_contactFlex(d, pr, dayWake, bed));
 
     // المقفل أولًا (تعديل اليوم، ثم الوقت المخطط المسجّل)، ثم الباقي بالترتيب.
     for (final f in queue) {
@@ -512,8 +525,9 @@ class ScheduleEngine {
         );
         continue;
       }
-      final w = windowSpan(f.window, pr, dayWake, bed);
+      final w = f.span ?? windowSpan(f.window, pr, dayWake, bed);
       var t = _search(busy, f.duration, w, f.preferred);
+      if (t == null && f.span != null) continue; // اقتراح: يسكت إن ما لقى وقت.
       if (t == null && f.window != Window.any) {
         t = _search(
           busy,
@@ -567,6 +581,7 @@ class ScheduleEngine {
           carriedFrom: f.carriedFrom,
           oneOffId: f.oneOffId,
           window: f.window,
+          personId: f.personId,
         ),
       );
     }
@@ -671,11 +686,13 @@ class ScheduleEngine {
       kind: kind,
       title: o.title,
       subtitle: o.note,
-      icon: switch (kind) {
-        ItemKind.event => 'event',
-        ItemKind.period => 'period',
-        _ => 'check',
-      },
+      icon:
+          o.icon ??
+          switch (kind) {
+            ItemKind.event => 'event',
+            ItemKind.period => 'period',
+            _ => 'check',
+          },
       start: start,
       end: start + o.duration,
       fixed: true,
@@ -794,6 +811,7 @@ class ScheduleEngine {
       window: i.window,
       log: log,
       subs: i.subs,
+      personId: i.personId,
     );
   }
 
@@ -930,6 +948,110 @@ class ScheduleEngine {
   }
 
   // ---------------------------------------------------------------------------
+  // التواصل مع الناس
+  // ---------------------------------------------------------------------------
+
+  /// توزيع الأسبوع: من يُقترح في أي يوم. ثابت طوال الأسبوع لأنه لا يقرأ
+  /// إلا السجلات التي قبل بدايته.
+  Map<Day, List<Person>> contactWeek(Day anyDay) {
+    final ws = anyDay.weekStart;
+    final cached = _contactCache[ws];
+    if (cached != null) return cached;
+    final c = input.contacts;
+    final out = <Day, List<Person>>{};
+    _contactCache[ws] = out;
+    if (!c.active || input.people.isEmpty || !(c.calls || c.messages)) {
+      return out;
+    }
+    final last = <String, Day>{};
+    for (final l in input.logs.values) {
+      if (!l.itemKey.startsWith('contact:')) continue;
+      if (l.status != ItemStatus.done || !l.date.isBefore(ws)) continue;
+      final pid = l.itemKey.substring(8);
+      final prev = last[pid];
+      if (prev == null || l.date.isAfter(prev)) last[pid] = l.date;
+    }
+    Day lastOf(Person p) => last[p.id] ?? p.addedAt.add(-p.freq.days);
+    bool due(Person p) => !lastOf(p).add(p.freq.days).isAfter(ws.add(6));
+    int byStale(Person a, Person b) {
+      final x = lastOf(a).compareTo(lastOf(b));
+      return x != 0 ? x : a.name.compareTo(b.name);
+    }
+
+    final pinned = input.people.where((p) => p.pinned && due(p)).toList()
+      ..sort(byStale);
+    final others = input.people.where((p) => !p.pinned && due(p)).toList()
+      ..sort(byStale);
+    final chosen = [...pinned, ...others.take(c.level.perWeek)];
+    final n = chosen.length;
+    for (var k = 0; k < n; k++) {
+      // توزيع متساوٍ على الأيام السبعة، من منتصف كل حصة.
+      final idx = ((k * 7 + 3) ~/ n).clamp(0, 6) % 7;
+      out.putIfAbsent(ws.add(idx), () => []).add(chosen[k]);
+    }
+    return out;
+  }
+
+  List<_Flex> _contactFlex(Day d, DayPrayers pr, int wake, int bed) {
+    final c = input.contacts;
+    if (!c.enabled) return const [];
+    final out = <_Flex>[];
+    final win = Span(
+      c.windowStart.clamp(wake, bed.clamp(0, minutesPerDay)),
+      c.windowEnd.clamp(wake, bed.clamp(0, minutesPerDay)),
+    );
+    for (final p in contactWeek(d)[d] ?? const <Person>[]) {
+      final call = (p.method == ContactMethod.call && c.calls) || !c.messages;
+      out.add(
+        _Flex(
+          key: p.itemKey,
+          kind: ItemKind.contact,
+          title: call ? 'اتصل ب${p.name}' : 'أرسل لـ${p.name}',
+          subtitle: call
+              ? '${p.relation.label} · ${p.freq.label}'
+              : contactDraft(p, c.windowStart),
+          icon: call ? 'call' : 'message',
+          duration: call ? 15 : 5,
+          window: Window.night,
+          span: win,
+          preferred: win.start,
+          track: TrackMode.confirm,
+          category: 'contacts',
+          isExtra: true,
+          personId: p.id,
+        ),
+      );
+    }
+    if (c.occasions) {
+      for (final p in input.people) {
+        for (final o in p.occasions.where((o) => o.on(d))) {
+          final gift = c.gifts && p.giftBudget != null
+              ? 'فكرة هدية ${p.giftBudget} ر.س · ${giftIdea(o.kind, p.giftBudget!)}'
+              : o.kind.label;
+          out.add(
+            _Flex(
+              key: 'occasion:${p.id}:${o.kind.name}',
+              kind: ItemKind.contact,
+              title: 'هنّئ ${p.name} ب${o.kind.phrase}',
+              subtitle: gift,
+              icon: 'gift',
+              duration: 10,
+              window: Window.morning,
+              span: Span(wake, bed.clamp(0, minutesPerDay)),
+              preferred: wake + 60 > 10 * 60 ? wake + 60 : 10 * 60,
+              track: TrackMode.confirm,
+              category: 'contacts',
+              isExtra: true,
+              personId: p.id,
+            ),
+          );
+        }
+      }
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
   // التذكيرات القصيرة
   // ---------------------------------------------------------------------------
 
@@ -969,15 +1091,17 @@ class ScheduleEngine {
         times.sort();
       }
       times = times.take(c.cups).toList();
-      final drank = _log(d, 'water')?.value ?? 0;
+      final drank = waterMl(_log(d, 'water')?.value);
+      final per = (input.settings.waterGoalMl / c.cups).round().clamp(1, 5000);
+      final cupsDone = drank ~/ per;
       for (var i = 0; i < times.length; i++) {
         out.add(
           ReminderLine(
             key: 'water#${i + 1}',
             kind: LineKind.water,
             minute: times[i],
-            title: 'تذكير: اشرب ماء',
-            done: i < drank,
+            title: 'اشرب ماء',
+            done: i < cupsDone,
           ),
         );
       }
@@ -1017,6 +1141,12 @@ class ScheduleEngine {
   }
 }
 
+/// كمية الماء بالمل. النسخ القديمة كانت تحفظ عدد الأكواب.
+int waterMl(int? v) {
+  if (v == null) return 0;
+  return v <= 20 ? v * 250 : v;
+}
+
 extension on ItemLog {
   bool get isFinal => status == ItemStatus.done || status == ItemStatus.notDone;
 }
@@ -1043,6 +1173,8 @@ class _Flex {
     this.book,
     this.carriedFrom,
     this.oneOffId,
+    this.span,
+    this.personId,
   });
 
   final String key;
@@ -1065,6 +1197,10 @@ class _Flex {
   final String? book;
   final Day? carriedFrom;
   final String? oneOffId;
+
+  /// نافذة مخصصة (اقتراحات التواصل). بدونها تُستخدم [window].
+  final Span? span;
+  final String? personId;
   bool dropped = false;
   bool manual = false;
 }

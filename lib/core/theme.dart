@@ -1,100 +1,103 @@
 import 'package:flutter/material.dart';
 
-/// ألوان التطبيق فوق Material 3، مأخوذة من النموذج، مع رموز حالات البطاقة.
+/// ألوان دليل التصميم (tokens.json) فوق Material 3.
 @immutable
 class MColors extends ThemeExtension<MColors> {
   const MColors({
-    required this.bg,
+    required this.page,
+    required this.card,
+    required this.sunk,
+    required this.line,
+    required this.lineStrong,
     required this.ink,
     required this.ink2,
     required this.muted,
     required this.accent,
-    required this.accent2,
-    required this.accentInk,
-    required this.card,
-    required this.line,
-    required this.kid,
-    required this.nowCard,
-    required this.breakBg,
-    required this.pill,
-    required this.pillInk,
-    required this.good,
-    required this.warn,
-    required this.doneBg,
-    required this.doneInk,
+    required this.accentSoft,
+    required this.onAccent,
     required this.amber,
-    required this.amberBg,
-    required this.amberLine,
+    required this.amberSoft,
+    required this.good,
+    required this.goodSoft,
+    required this.water,
+    required this.waterSoft,
+    required this.scrim,
   });
 
-  final Color bg,
+  final Color page,
+      card,
+      sunk,
+      line,
+      lineStrong,
       ink,
       ink2,
       muted,
       accent,
-      accent2,
-      accentInk,
-      card,
-      line,
-      kid,
-      nowCard,
-      breakBg,
-      pill,
-      pillInk,
-      good,
-      warn,
-      doneBg,
-      doneInk,
+      accentSoft,
+      onAccent,
       amber,
-      amberBg,
-      amberLine;
+      amberSoft,
+      good,
+      goodSoft,
+      water,
+      waterSoft,
+      scrim;
+
+  // أسماء قديمة تشير إلى الرموز الجديدة.
+  Color get bg => page;
+  Color get accent2 => accent;
+  Color get accentInk => onAccent;
+  Color get kid => sunk;
+  Color get nowCard => accentSoft;
+  Color get breakBg => sunk;
+  Color get pill => accent;
+  Color get pillInk => onAccent;
+  Color get warn => amber;
+  Color get doneBg => sunk;
+  Color get doneInk => muted;
+  Color get amberBg => amberSoft;
+  Color get amberLine => amber.withValues(alpha: .35);
 
   static const light = MColors(
-    bg: Color(0xFFFFFFFF),
-    ink: Color(0xFF15171C),
-    ink2: Color(0xFF4A5266),
-    muted: Color(0xFF7A87A8),
-    accent: Color(0xFF97B4E3),
-    accent2: Color(0xFF5F86CC),
-    accentInk: Color(0xFF0F1A33),
-    card: Color(0xFFF1F5FC),
-    line: Color(0xFFD6E1F4),
-    kid: Color(0xFFE7E9EF),
-    nowCard: Color(0xFFDDE7F8),
-    breakBg: Color(0xFFF7FAFF),
-    pill: Color(0xFF0E0F12),
-    pillInk: Color(0xFFFFFFFF),
-    good: Color(0xFF3A9D57),
-    warn: Color(0xFFC7792B),
-    doneBg: Color(0xFFF3F4F6),
-    doneInk: Color(0xFF6B7280),
-    amber: Color(0xFFA8640F),
-    amberBg: Color(0xFFFDF3E3),
-    amberLine: Color(0xFFF1D3A4),
+    page: Color(0xFFF6F7FA),
+    card: Color(0xFFFFFFFF),
+    sunk: Color(0xFFEEF1F6),
+    line: Color(0xFFE2E6EE),
+    lineStrong: Color(0xFF878FA3),
+    ink: Color(0xFF171B24),
+    ink2: Color(0xFF475066),
+    muted: Color(0xFF646D84),
+    accent: Color(0xFF3D64AB),
+    accentSoft: Color(0xFFE5ECF8),
+    onAccent: Color(0xFFFFFFFF),
+    amber: Color(0xFF95570B),
+    amberSoft: Color(0xFFFBF1E1),
+    good: Color(0xFF2A7745),
+    goodSoft: Color(0xFFE3F3E8),
+    water: Color(0xFF186C88),
+    waterSoft: Color(0xFFE1F1F6),
+    scrim: Color(0x660F131B),
   );
 
   static const dark = MColors(
-    bg: Color(0xFF0F131B),
+    page: Color(0xFF0E1219),
+    card: Color(0xFF171D28),
+    sunk: Color(0xFF202838),
+    line: Color(0xFF2A3345),
+    lineStrong: Color(0xFF646F87),
     ink: Color(0xFFEEF1F7),
-    ink2: Color(0xFFB9C2D6),
-    muted: Color(0xFF97A6C6),
-    accent: Color(0xFF7F9FD6),
-    accent2: Color(0xFFA9C2EE),
-    accentInk: Color(0xFF0B1222),
-    card: Color(0xFF18202E),
-    line: Color(0xFF273349),
-    kid: Color(0xFF1D2431),
-    nowCard: Color(0xFF1F2C45),
-    breakBg: Color(0xFF141B27),
-    pill: Color(0xFFF1F4FA),
-    pillInk: Color(0xFF0E0F12),
-    good: Color(0xFF5CC27A),
-    warn: Color(0xFFE0A160),
-    doneBg: Color(0xFF161A21),
-    doneInk: Color(0xFF9AA3B2),
+    ink2: Color(0xFFBCC4D6),
+    muted: Color(0xFF8E99B2),
+    accent: Color(0xFF9DB8E6),
+    accentSoft: Color(0xFF1F2B42),
+    onAccent: Color(0xFF0E1A33),
     amber: Color(0xFFF0B462),
-    amberBg: Color(0xFF2A2216),
-    amberLine: Color(0xFF5A4526),
+    amberSoft: Color(0xFF2B2216),
+    good: Color(0xFF6FCB8C),
+    goodSoft: Color(0xFF16271C),
+    water: Color(0xFF6CC3DE),
+    waterSoft: Color(0xFF13282F),
+    scrim: Color(0x99000000),
   );
 
   @override
@@ -104,6 +107,80 @@ class MColors extends ThemeExtension<MColors> {
   MColors lerp(ThemeExtension<MColors>? other, double t) =>
       (other is MColors && t > .5) ? other : this;
 }
+
+/// سلم الخطوط من الدليل. الحجم النهائي يُضرب في إعداد «حجم الخط».
+abstract final class T {
+  static const brand = TextStyle(
+    fontFamily: fontDisplay,
+    fontSize: 19,
+    height: 26 / 19,
+    fontWeight: FontWeight.w600,
+  );
+  static const stat = TextStyle(
+    fontFamily: fontDisplay,
+    fontSize: 28,
+    height: 34 / 28,
+    fontWeight: FontWeight.w500,
+  );
+  static const onboardTitle = TextStyle(
+    fontFamily: fontDisplay,
+    fontSize: 22,
+    height: 32 / 22,
+    fontWeight: FontWeight.w600,
+  );
+  static const screenTitle = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 17,
+    height: 26 / 17,
+    fontWeight: FontWeight.w600,
+  );
+  static const section = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 14,
+    height: 22 / 14,
+    fontWeight: FontWeight.w600,
+  );
+  static const cardTitle = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 15,
+    height: 22 / 15,
+    fontWeight: FontWeight.w500,
+  );
+  static const body = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 14,
+    height: 22 / 14,
+  );
+  static const meta = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 12,
+    height: 18 / 12,
+  );
+  static const label = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 12,
+    height: 16 / 12,
+    fontWeight: FontWeight.w500,
+  );
+  static const micro = TextStyle(
+    fontFamily: fontBody,
+    fontSize: 11,
+    height: 14 / 11,
+    fontWeight: FontWeight.w500,
+  );
+}
+
+/// المسافات والزوايا.
+abstract final class R {
+  static const sm = 8.0;
+  static const md = 14.0;
+  static const lg = 20.0;
+  static const sheet = 28.0;
+}
+
+const shadowFloat = [
+  BoxShadow(color: Color(0x29171B24), blurRadius: 16, offset: Offset(0, 6)),
+];
 
 extension MColorsX on BuildContext {
   MColors get c => Theme.of(this).extension<MColors>()!;
@@ -115,11 +192,15 @@ const fontDisplay = 'ReadexPro';
 ThemeData buildTheme(Brightness b) {
   final c = b == Brightness.light ? MColors.light : MColors.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: c.accent2,
+    seedColor: c.accent,
     brightness: b,
-    surface: c.bg,
-    primary: c.accent2,
-    onPrimary: b == Brightness.light ? Colors.white : c.accentInk,
+    surface: c.page,
+    primary: c.accent,
+    onPrimary: c.onAccent,
+    surfaceContainerLow: c.card,
+    surfaceContainerHighest: c.sunk,
+    outline: c.lineStrong,
+    outlineVariant: c.line,
   );
   final base = ThemeData(
     useMaterial3: true,
@@ -128,92 +209,122 @@ ThemeData buildTheme(Brightness b) {
     brightness: b,
   );
   return base.copyWith(
-    scaffoldBackgroundColor: c.bg,
+    scaffoldBackgroundColor: c.page,
     extensions: [c],
-    textTheme: base.textTheme.apply(
-      bodyColor: c.ink,
-      displayColor: c.ink,
-      fontFamily: fontBody,
-    ),
+    textTheme: base.textTheme
+        .apply(bodyColor: c.ink, displayColor: c.ink, fontFamily: fontBody)
+        .copyWith(
+          bodyMedium: T.body.copyWith(color: c.ink),
+          bodyLarge: T.body.copyWith(color: c.ink, fontSize: 15),
+          bodySmall: T.meta.copyWith(color: c.muted),
+          titleMedium: T.cardTitle.copyWith(color: c.ink),
+          titleLarge: T.screenTitle.copyWith(color: c.ink),
+          labelLarge: T.section.copyWith(color: c.ink),
+        ),
     appBarTheme: AppBarTheme(
-      backgroundColor: c.bg,
+      backgroundColor: c.page,
       foregroundColor: c.ink,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(
-        fontFamily: fontDisplay,
-        fontWeight: FontWeight.w700,
-        fontSize: 20,
-        color: c.ink,
-      ),
+      titleTextStyle: T.screenTitle.copyWith(color: c.ink),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: c.bg,
+      backgroundColor: c.card,
+      modalBarrierColor: c.scrim,
       showDragHandle: true,
+      dragHandleColor: c.line,
+      dragHandleSize: const Size(36, 4),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(R.sheet)),
       ),
     ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: c.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.lg)),
+    ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: c.bg,
-      indicatorColor: c.card,
-      height: 68,
+      backgroundColor: c.card,
+      indicatorColor: c.accentSoft,
+      height: 64,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
       labelTextStyle: WidgetStateProperty.resolveWith(
-        (s) => TextStyle(
-          fontFamily: fontBody,
-          fontSize: 12.5,
+        (s) => T.micro.copyWith(
+          fontSize: 11.5,
           fontWeight: s.contains(WidgetState.selected)
-              ? FontWeight.w700
+              ? FontWeight.w600
               : FontWeight.w500,
           color: s.contains(WidgetState.selected) ? c.ink : c.muted,
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
         (s) => IconThemeData(
-          color: s.contains(WidgetState.selected) ? c.ink : c.muted,
+          size: 22,
+          color: s.contains(WidgetState.selected) ? c.accent : c.muted,
         ),
       ),
     ),
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: c.card,
-      selectedColor: c.accent,
+      selectedColor: c.accentSoft,
       side: BorderSide(color: c.line),
-      labelStyle: TextStyle(
-        fontFamily: fontBody,
-        color: c.ink,
-        fontWeight: FontWeight.w600,
-      ),
+      labelStyle: T.label.copyWith(color: c.ink, fontSize: 13),
       shape: const StadiumBorder(),
+      checkmarkColor: c.accent,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: c.card,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      hintStyle: T.body.copyWith(color: c.muted),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.md),
         borderSide: BorderSide(color: c.line),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(R.md),
         borderSide: BorderSide(color: c.line),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: c.accent2, width: 2),
+        borderRadius: BorderRadius.circular(R.md),
+        borderSide: BorderSide(color: c.accent, width: 2),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
-      backgroundColor: c.pill,
-      contentTextStyle: TextStyle(fontFamily: fontBody, color: c.pillInk),
-      actionTextColor: c.accent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: c.ink,
+      contentTextStyle: T.body.copyWith(color: c.page),
+      actionTextColor: b == Brightness.light
+          ? MColors.dark.accent
+          : MColors.light.accent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(R.md)),
     ),
-    dividerTheme: DividerThemeData(color: c.line, space: 1),
-    switchTheme: SwitchThemeData(
-      trackColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? c.accent2 : c.line,
+    dividerTheme: DividerThemeData(color: c.line, space: 1, thickness: 1),
+    listTileTheme: ListTileThemeData(
+      titleTextStyle: T.body.copyWith(
+        color: c.ink,
+        fontWeight: FontWeight.w500,
       ),
+      subtitleTextStyle: T.meta.copyWith(color: c.muted),
+      iconColor: c.ink2,
+      minVerticalPadding: 10,
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.onAccent : c.lineStrong,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : c.sunk,
+      ),
+      trackOutlineColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? c.accent : c.line,
+      ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: c.accent,
+      foregroundColor: c.onAccent,
     ),
   );
 }

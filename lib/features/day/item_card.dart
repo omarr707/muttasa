@@ -7,36 +7,42 @@ import 'package:schedule_core/schedule_core.dart';
 import '../../core/icons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../../services/contact_actions.dart';
 import '../../state/providers.dart';
 import 'item_sheet.dart';
+import 'water_sheet.dart';
 
-/// ItemCard واحد بمحتوى يتغير حسب النوع. النقر على جسم البطاقة ينفّذ إجراءها الرئيسي،
-/// وفي الأيام القادمة يقول متى موعدها فقط.
+/// بطاقة المهمة من دليل التصميم: مربع أيقونة، عنوان بسطر، وصف بسطر، وإجراء واحد.
+/// النقر أو الضغط المطوّل يفتح الخيارات.
 class ItemCard extends ConsumerWidget {
   const ItemCard({
     super.key,
     required this.item,
     required this.date,
     this.highlight = false,
+    this.missedDot = false,
   });
   final PlanItem item;
   final Day date;
   final bool highlight;
+
+  /// نقطة كهرمانية في سطر الوصف (داخل ورقة «فاتت» فقط).
+  final bool missedDot;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
     final today = ref.watch(todayProvider);
     final now = ref.watch(nowMinuteProvider);
+    final compact = ref.watch(
+      appDataProvider.select((d) => d.settings.compact),
+    );
     final isToday = date == today;
     final isFuture = date.isAfter(today);
     final i = item;
     final done = i.isDoneLike;
     final pending = i.status == ItemStatus.pending;
     final isNow = isToday && i.start <= now && now < i.end && pending;
-    final late =
-        (isToday && i.end <= now && pending && i.track != TrackMode.auto) ||
-        i.status == ItemStatus.missed;
     final upcoming = isFuture || (isToday && i.start > now && pending);
     final running = i.log?.timerRunning == true;
     final off =
@@ -47,195 +53,210 @@ class ItemCard extends ConsumerWidget {
 
     if (i.kind == ItemKind.work) return _WorkCard(item: i, date: date);
 
-    // ألوان الحالة كما في النموذج.
-    var bg = c.bg;
-    var border = c.line;
-    var borderW = 1.0;
-    if (done) {
-      bg = c.doneBg;
-      border = Colors.transparent;
-    } else if (isNow || running) {
-      bg = c.nowCard;
-      border = c.accent2;
-      borderW = 2;
-    } else if (late) {
-      bg = c.amberBg;
-      border = c.amberLine;
-    }
-    if (highlight) {
-      border = c.accent2;
-      borderW = 2;
-    }
-    final ink = done ? c.doneInk : (off ? c.ink2 : c.ink);
-
-    final sub = <String>[
-      fmtRange(i.start, i.end),
-      if (i.subtitle != null && i.subtitle!.isNotEmpty) i.subtitle!,
-      if (i.pagesFrom != null && i.kind == ItemKind.quran)
-        'وردك: ${i.pagesTo! - i.pagesFrom! + 1} صفحات',
-    ].join(' · ');
-
+    final ctrl = ref.read(appDataProvider.notifier);
     Future<void> confirm() async {
-      final ctrl = ref.read(appDataProvider.notifier);
       if (done) {
         await ctrl.undo(date, i.key);
         return;
       }
       if (i.pagesFrom != null) return showPagesSheet(context, ref, i, date);
-      if (i.track == TrackMode.start && !late && isToday) {
+      if (i.track == TrackMode.start && isToday && !(i.end <= now)) {
         return running ? ctrl.pauseTimer(date, i) : ctrl.startTimer(date, i);
       }
       await ctrl.markDone(date, i);
       if (context.mounted) {
         toast(
           context,
-          'تمت ✓ ${i.title}',
+          'تمّت ✓ ${i.title}',
           actionLabel: 'تراجع',
           onAction: () => ctrl.undo(date, i.key),
         );
       }
     }
 
+    final meta = <String>[
+      fmtRange(i.start, i.end % minutesPerDay),
+      if (off) statusLabel(i, isToday: isToday, now: now),
+      if (!off && i.subtitle != null && i.subtitle!.isNotEmpty && !_isDraft(i))
+        nums(i.subtitle),
+      if (i.pagesFrom != null && i.kind == ItemKind.quran)
+        'وردك ${nums(i.pagesTo! - i.pagesFrom! + 1)} صفحات',
+      if (i.track == TrackMode.auto && !done && !off && !isFuture)
+        'تُحسب تلقائيًا',
+    ].join(' · ');
+
+    // الإجراء الواحد.
+    Widget? action;
     final canCheck =
         !isFuture &&
         !off &&
         i.track != TrackMode.auto &&
         (done || !upcoming || !i.fixed);
-
-    // الجانب: حالة مختصرة ثم الأزرار.
-    final side = <Widget>[];
-    if (done) {
-      side.add(
-        Text(
-          i.status == ItemStatus.auto ? 'محسوبة' : 'تمت',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: c.doneInk,
-          ),
-        ),
+    final contact = i.kind == ItemKind.contact && i.icon != 'gift';
+    if (contact && !done && !isFuture && !off) {
+      final person = ref
+          .watch(appDataProvider.select((d) => d.people))
+          .where((p) => p.id == i.personId)
+          .firstOrNull;
+      final call = i.icon == 'call';
+      action = SmallButton(
+        label: call ? 'اتصل' : 'أرسل',
+        primary: true,
+        onTap: () async {
+          final ok =
+              person != null &&
+              await openContact(
+                person,
+                call: call,
+                draft: call ? null : i.subtitle,
+              );
+          if (!context.mounted) return;
+          if (!ok) {
+            toast(context, 'أضف رقم ${person?.name ?? 'الشخص'} من الإعدادات');
+            return;
+          }
+          toast(
+            context,
+            call ? 'إذا خلّصت المكالمة سجّلها' : 'المسودة جاهزة، أرسلها بنفسك',
+            actionLabel: 'تمّ',
+            onAction: () => ctrl.markDone(date, i),
+          );
+        },
       );
-    } else if (late) {
-      side.add(const _Chip('فات وقتها', icon: Icons.schedule, amber: true));
-    } else if (off || i.status == ItemStatus.auto) {
-      side.add(_Chip(statusLabel(i, isToday: isToday, now: now)));
-    } else if (i.track == TrackMode.auto && !isFuture) {
-      side.add(const _Chip('تُحسب تلقائيًا'));
-    }
-    if (!done && !off && !(i.fixed && upcoming)) {
-      side.add(
-        _IconBtn(
-          icon: Icons.more_horiz,
-          tooltip: 'خيارات ${i.title}',
-          onTap: () => showItemSheet(context, ref, i, date),
-        ),
+    } else if (canCheck) {
+      action = CheckCircle(
+        checked: done,
+        icon: i.track == TrackMode.start && !done && isToday && i.end > now
+            ? (running ? Icons.pause : Icons.play_arrow)
+            : null,
+        label: done ? 'ألغِ إنجاز ${i.title}' : 'تمّت ${i.title}',
+        onTap: confirm,
       );
-    }
-    if (i.fixed && upcoming && !done) {
-      side.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5),
-          child: Icon(Icons.lock_outline, size: 16, color: c.muted),
-        ),
-      );
-    }
-    if (canCheck) {
-      side.add(
-        CheckBox(
-          checked: done,
-          icon: i.track == TrackMode.start && !done && !late
-              ? (running ? Icons.pause : Icons.play_arrow)
-              : null,
-          label: done ? 'ألغِ إنجاز ${i.title}' : 'تمت ${i.title}',
-          onTap: confirm,
-        ),
+    } else if (i.fixed && upcoming && !done) {
+      action = Padding(
+        padding: const EdgeInsets.all(7),
+        child: Icon(Icons.lock_outline, size: 16, color: c.muted),
       );
     }
 
-    final tags = <Widget>[
-      if (isNow) const _Tag('الآن', now: true),
-      if (i.carriedFrom != null) const _Tag('منقولة', hl: true),
-      if (i.manual && !done) const _Tag('عدّلتها', hl: true),
-      if (i.outsideWindow && !done) const _Tag('خارج فترتك'),
-      if (i.isExtra) const _Tag('إضافية'),
-    ];
+    final iconBg = switch (i.icon) {
+      'gift' => c.amberSoft,
+      _ => done ? c.card : c.sunk,
+    };
+    final iconFg = switch (i.icon) {
+      'gift' => c.amber,
+      _ => done ? c.muted : c.ink2,
+    };
 
-    final showSubs = i.subs.isNotEmpty;
+    var border = c.line;
+    var borderW = 1.0;
+    if ((isNow || running) && !done) {
+      border = c.accent;
+      borderW = 2;
+    }
+    if (highlight) {
+      border = c.accent;
+      borderW = 2;
+    }
+
+    final draftLine = _isDraft(i) && !done && !isFuture;
 
     return Semantics(
-      label: '${i.title}، ${fmtRange(i.start, i.end)}',
-      child: Opacity(
-        opacity: off ? .78 : 1,
+      label: '${i.title}، ${fmtRange(i.start, i.end % minutesPerDay)}',
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 200),
+        opacity: off ? .7 : 1,
         child: Material(
-          color: bg,
+          color: done ? c.sunk : c.card,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: BorderSide(color: border, width: borderW),
+            borderRadius: BorderRadius.circular(R.md),
+            side: BorderSide(
+              color: done ? Colors.transparent : border,
+              width: borderW,
+            ),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => showItemSheet(context, ref, i, date),
+            onLongPress: () => showItemSheet(context, ref, i, date),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(10, 10, 8, 10),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        child: Icon(iconFor(i.icon), size: 22, color: ink),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Wrap(
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 5,
-                              runSpacing: 2,
-                              children: [
-                                Text(
-                                  i.title,
-                                  style: TextStyle(
-                                    fontFamily: fontDisplay,
-                                    fontWeight: done
-                                        ? FontWeight.w600
-                                        : FontWeight.w700,
-                                    fontSize: 16,
-                                    height: 1.3,
-                                    color: ink,
-                                    decoration: i.status == ItemStatus.skipped
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                  ),
-                                ),
-                                ...tags,
-                              ],
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              sub,
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                color: c.ink2,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: compact ? 48 : 58),
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(
+                      compact ? 8 : 10,
+                      compact ? 6 : 10,
+                      8,
+                      compact ? 6 : 10,
+                    ),
+                    child: Row(
+                      children: [
+                        IconSquare(
+                          iconFor(i.icon),
+                          bg: iconBg,
+                          fg: iconFg,
+                          size: compact ? 30 : 34,
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      ...side,
-                    ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                i.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: T.cardTitle.copyWith(
+                                  color: done || off ? c.muted : c.ink,
+                                  decoration: i.status == ItemStatus.skipped
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  if (missedDot) ...[
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: c.amber,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      meta,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: T.meta.copyWith(color: c.muted),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (action != null) ...[
+                          const SizedBox(width: 6),
+                          action,
+                        ],
+                      ],
+                    ),
                   ),
                 ),
+                if (draftLine) _DraftLine(text: i.subtitle!),
                 if (running || (i.log?.timerAccumSeconds ?? 0) > 0 && !done)
                   _TimerRow(item: i, date: date),
                 if (i.pagesFrom != null && !done && !isFuture && !off)
                   _PagesRow(item: i, date: date),
-                if (showSubs) _Subs(item: i, date: date, enabled: !isFuture),
+                if (i.subs.isNotEmpty)
+                  _Subs(item: i, date: date, enabled: !isFuture),
               ],
             ),
           ),
@@ -243,23 +264,26 @@ class ItemCard extends ConsumerWidget {
       ),
     );
   }
+
+  static bool _isDraft(PlanItem i) =>
+      i.kind == ItemKind.contact && i.icon == 'message';
 }
 
-/// مربع التأكيد كما في النموذج: إطار، ويمتلئ عند الإنجاز.
-class CheckBox extends StatelessWidget {
-  const CheckBox({
+/// دائرة التأكيد ٣٠: إطار، وتمتلئ بالأخضر عند الإنجاز.
+class CheckCircle extends StatelessWidget {
+  const CheckCircle({
     super.key,
     required this.checked,
     required this.onTap,
     required this.label,
     this.icon,
-    this.small = false,
+    this.size = 30,
   });
   final bool checked;
   final VoidCallback? onTap;
   final String label;
   final IconData? icon;
-  final bool small;
+  final double size;
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -267,26 +291,29 @@ class CheckBox extends StatelessWidget {
       button: true,
       checked: checked,
       label: label,
+      excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(7),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: small ? 34 : 38,
-            height: small ? 26 : 30,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              color: checked ? c.doneInk : Colors.transparent,
-              borderRadius: BorderRadius.circular(small ? 10 : 12),
+              color: checked ? c.good : Colors.transparent,
+              shape: BoxShape.circle,
               border: Border.all(
-                color: checked ? c.doneInk : c.muted,
-                width: 2,
+                color: checked ? c.good : c.lineStrong,
+                width: 1.5,
               ),
             ),
             child: checked
-                ? const Icon(Icons.check, size: 18, color: Colors.white)
-                : (icon == null ? null : Icon(icon, size: 18, color: c.ink2)),
+                ? Icon(Icons.check, size: size * .55, color: c.card)
+                : (icon == null
+                      ? null
+                      : Icon(icon, size: size * .55, color: c.accent)),
           ),
         ),
       ),
@@ -294,85 +321,32 @@ class CheckBox extends StatelessWidget {
   }
 }
 
-class _IconBtn extends StatelessWidget {
-  const _IconBtn({required this.icon, required this.tooltip, this.onTap});
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: tooltip,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: SizedBox(
-        width: 30,
-        height: 36,
-        child: Icon(icon, size: 20, color: context.c.muted),
-      ),
-    ),
-  );
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag(this.text, {this.now = false, this.hl = false});
+/// سطر المسودة داخل بطاقة الرسالة.
+class _DraftLine extends StatelessWidget {
+  const _DraftLine({required this.text});
   final String text;
-  final bool now;
-  final bool hl;
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7),
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: now ? c.accent2 : c.bg,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: now ? c.accent2 : (hl ? c.accent : c.line)),
+        color: c.sunk,
+        borderRadius: BorderRadius.circular(R.sm),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10.5,
-          height: 1.7,
-          fontWeight: FontWeight.w600,
-          color: now ? Colors.white : (hl ? c.accent2 : c.muted),
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip(this.text, {this.icon, this.amber = false});
-  final String text;
-  final IconData? icon;
-  final bool amber;
-  @override
-  Widget build(BuildContext context) {
-    final c = context.c;
-    final fg = amber ? c.amber : c.ink2;
-    return Container(
-      margin: const EdgeInsetsDirectional.only(end: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(
-        color: amber ? c.bg : c.card,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: amber ? c.amberLine : c.line),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13, color: fg),
-            const SizedBox(width: 4),
-          ],
           Text(
-            text,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-              color: fg,
-            ),
+            '«$text»',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: T.meta.copyWith(color: c.ink2, fontSize: 13),
+          ),
+          Text(
+            'مسودة لا تُرسل إلا منك',
+            style: T.micro.copyWith(color: c.muted),
           ),
         ],
       ),
@@ -391,46 +365,45 @@ class _Subs extends ConsumerWidget {
     final c = context.c;
     final ctrl = ref.read(appDataProvider.notifier);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsetsDirectional.fromSTEB(54, 0, 8, 8),
       child: Column(
         children: [
           for (final s in item.subs)
             Container(
-              margin: const EdgeInsets.only(top: 6),
-              padding: const EdgeInsetsDirectional.fromSTEB(10, 6, 6, 6),
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsetsDirectional.fromSTEB(10, 0, 0, 0),
               decoration: BoxDecoration(
-                color: s.done ? c.doneBg : c.kid,
-                borderRadius: BorderRadius.circular(14),
+                color: c.sunk,
+                borderRadius: BorderRadius.circular(R.sm),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.subdirectory_arrow_left, size: 16, color: c.muted),
-                  const SizedBox(width: 6),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          s.title,
-                          style: TextStyle(
-                            fontFamily: fontDisplay,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: s.done ? c.doneInk : c.ink,
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: s.title,
+                            style: T.label.copyWith(
+                              fontSize: 13,
+                              color: s.done ? c.muted : c.ink,
+                            ),
                           ),
-                        ),
-                        Text(
-                          s.detail,
-                          style: TextStyle(fontSize: 11.5, color: c.ink2),
-                        ),
-                      ],
+                          TextSpan(
+                            text: '  ${nums(s.detail)}',
+                            style: T.micro.copyWith(color: c.muted),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   if (enabled)
-                    CheckBox(
-                      small: true,
+                    CheckCircle(
+                      size: 22,
                       checked: s.done,
-                      label: s.done ? 'ألغِ ${s.title}' : 'تمت ${s.title}',
+                      label: s.done ? 'ألغِ ${s.title}' : 'تمّت ${s.title}',
                       onTap: () => ctrl.toggleLine(date, s.key, !s.done),
                     ),
                 ],
@@ -481,7 +454,7 @@ class _TimerRowState extends ConsumerState<_TimerRow> {
     final ss = (secs % 60).toString().padLeft(2, '0');
     final ctrl = ref.read(appDataProvider.notifier);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -489,40 +462,34 @@ class _TimerRowState extends ConsumerState<_TimerRow> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (secs / target).clamp(0, 1),
-              minHeight: 6,
-              backgroundColor: c.line,
-              color: c.accent2,
+              minHeight: 4,
+              backgroundColor: c.sunk,
+              color: c.accent,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             children: [
               Text(
-                '$mm:$ss',
-                style: const TextStyle(
-                  fontFamily: fontDisplay,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
+                nums('$mm:$ss'),
+                style: T.section.copyWith(fontWeight: FontWeight.w500),
               ),
               Text(
                 ' من ${fmtDuration(widget.item.duration)}',
-                style: TextStyle(color: c.muted, fontSize: 12.5),
+                style: T.meta.copyWith(color: c.muted),
               ),
               const Spacer(),
-              PillButton(
+              SmallButton(
                 label: l.timerRunning ? 'أوقف مؤقتًا' : 'كمّل',
-                soft: true,
-                dense: true,
-                onPressed: () => l.timerRunning
+                onTap: () => l.timerRunning
                     ? ctrl.pauseTimer(widget.date, widget.item)
                     : ctrl.startTimer(widget.date, widget.item),
               ),
               const SizedBox(width: 6),
-              PillButton(
+              SmallButton(
                 label: 'أنهِ',
-                dense: true,
-                onPressed: () => ctrl.finishTimer(widget.date, widget.item),
+                primary: true,
+                onTap: () => ctrl.finishTimer(widget.date, widget.item),
               ),
             ],
           ),
@@ -539,25 +506,23 @@ class _PagesRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: c.kid,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(54, 0, 10, 10),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              'من صفحة ${item.pagesFrom} إلى ${item.pagesTo}${item.book == null ? '' : ' · ${item.book}'}',
-              style: TextStyle(fontSize: 13, color: c.ink2),
+              nums(
+                'من صفحة ${item.pagesFrom} إلى ${item.pagesTo}${item.book == null ? '' : ' · ${item.book}'}',
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: T.meta.copyWith(color: c.ink2),
             ),
           ),
-          PillButton(
+          SmallButton(
             label: 'سجّل تقدمي',
-            dense: true,
-            onPressed: () => showPagesSheet(context, ref, item, date),
+            onTap: () => showPagesSheet(context, ref, item, date),
           ),
         ],
       ),
@@ -565,7 +530,7 @@ class _PagesRow extends ConsumerWidget {
   }
 }
 
-/// فترة ثابتة (الدوام): شريط الفترات مع الاستراحة وموضع الآن، كما في النموذج.
+/// فترة ثابتة (الدوام): شريط الفترات مع الاستراحة وموضع الآن.
 class _WorkCard extends ConsumerWidget {
   const _WorkCard({required this.item, required this.date});
   final PlanItem item;
@@ -581,41 +546,39 @@ class _WorkCard extends ConsumerWidget {
     final inside = date == today && now >= s && now < e;
     Widget seg(int from, int to, {bool gap = false}) => Expanded(
       flex: (to - from).clamp(1, 24 * 60),
-      child: Container(color: gap ? c.breakBg : c.accent),
+      child: Container(color: gap ? c.sunk : c.accent.withValues(alpha: .55)),
     );
     return Material(
-      color: inside ? c.nowCard : c.card,
+      color: c.card,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: inside ? c.accent2 : c.line),
+        borderRadius: BorderRadius.circular(R.md),
+        side: BorderSide(
+          color: inside ? c.accent : c.line,
+          width: inside ? 2 : 1,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => showItemSheet(context, ref, item, date),
+        onLongPress: () => showItemSheet(context, ref, item, date),
         child: Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(10, 11, 12, 12),
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 10, 12, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  SizedBox(
-                    width: 24,
-                    child: Icon(iconFor('work'), size: 22, color: c.ink),
-                  ),
-                  const SizedBox(width: 8),
+                  IconSquare(iconFor('work')),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           item.title,
-                          style: const TextStyle(
-                            fontFamily: fontDisplay,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            height: 1.3,
-                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: T.cardTitle,
                         ),
                         Text(
                           [
@@ -623,16 +586,17 @@ class _WorkCard extends ConsumerWidget {
                             if (item.subtitle == 'ذيل وردية أمس')
                               item.subtitle!,
                           ].join(' · '),
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: c.ink2,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: T.meta.copyWith(color: c.muted),
                         ),
                       ],
                     ),
                   ),
-                  Icon(Icons.lock_outline, size: 16, color: c.muted),
+                  Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(Icons.lock_outline, size: 16, color: c.muted),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -641,12 +605,9 @@ class _WorkCard extends ConsumerWidget {
                   clipBehavior: Clip.none,
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: c.line, width: .5),
-                        ),
+                      borderRadius: BorderRadius.circular(4),
+                      child: SizedBox(
+                        height: 6,
                         child: Row(
                           children: b == null
                               ? [seg(s, e)]
@@ -661,12 +622,12 @@ class _WorkCard extends ConsumerWidget {
                     if (inside)
                       PositionedDirectional(
                         start: cons.maxWidth * (now - s) / total - 1.5,
-                        top: -3,
+                        top: -4,
                         child: Container(
                           width: 3,
                           height: 14,
                           decoration: BoxDecoration(
-                            color: c.accent2,
+                            color: c.accent,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -676,19 +637,9 @@ class _WorkCard extends ConsumerWidget {
               ),
               if (b != null) ...[
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(Icons.coffee_outlined, size: 15, color: c.accent2),
-                    const SizedBox(width: 6),
-                    Text(
-                      'الاستراحة ${fmtRange(b.start, b.end)} · وقت متاح',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: c.accent2,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                Text(
+                  'الاستراحة ${fmtRange(b.start, b.end)} · وقت متاح',
+                  style: T.micro.copyWith(color: c.accent),
                 ),
               ],
             ],
@@ -699,24 +650,16 @@ class _WorkCard extends ConsumerWidget {
   }
 }
 
-/// الخطوط الخفيفة بين البطاقات: الماء «4 من 8»، الوقوف، التنفس.
+/// الخطوط الخفيفة بين البطاقات: بلا أزرار. خط الماء يفتح ورقة الماء.
 class ReminderLineTile extends ConsumerWidget {
-  const ReminderLineTile({
-    super.key,
-    required this.line,
-    required this.date,
-    required this.water,
-  });
+  const ReminderLineTile({super.key, required this.line, required this.date});
   final ReminderLine line;
   final Day date;
-  final (int, int) water;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
-    final ctrl = ref.read(appDataProvider.notifier);
     final today = ref.watch(todayProvider);
-    final canLog = !date.isAfter(today);
     final icon = switch (line.kind) {
       LineKind.water => 'water',
       LineKind.stand => 'stand',
@@ -724,104 +667,72 @@ class ReminderLineTile extends ConsumerWidget {
       LineKind.sleep => 'sleep',
       LineKind.custom => 'bell',
     };
-    Widget? action;
-    if (canLog) {
-      switch (line.kind) {
-        case LineKind.water:
-          action = line.done
-              ? Text('✓', style: TextStyle(color: c.good))
-              : _MiniPill(
-                  label: 'سجّل',
-                  onTap: () {
-                    ctrl.addWater(date, 1);
-                    toast(
-                      context,
-                      'الماء: ${water.$1 + 1} من ${water.$2}',
-                      actionLabel: 'تراجع',
-                      onAction: () => ctrl.addWater(date, -1),
-                    );
-                  },
-                );
-        case LineKind.breathe:
-        case LineKind.custom:
-          action = line.done
-              ? Text('✓', style: TextStyle(color: c.good))
-              : _MiniPill(
-                  label: line.kind == LineKind.breathe ? 'ابدأ' : 'تم',
-                  onTap: () => ctrl.toggleLine(date, line.key, true),
-                );
-        case LineKind.stand:
-        case LineKind.sleep:
-          action = null;
+    final color = line.kind == LineKind.water ? c.water : c.muted;
+    VoidCallback? onTap;
+    if (!date.isAfter(today)) {
+      if (line.kind == LineKind.water) {
+        onTap = () => showWaterSheet(context, ref, date);
+      } else if (line.kind == LineKind.breathe ||
+          line.kind == LineKind.custom) {
+        onTap = () => ref
+            .read(appDataProvider.notifier)
+            .toggleLine(date, line.key, !line.done);
       }
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(iconFor(icon), size: 18, color: line.done ? c.good : c.accent2),
-          const SizedBox(width: 8),
-          Text(
-            fmtTime(line.minute),
-            style: TextStyle(
-              fontSize: 12.5,
-              color: c.muted,
-              fontFamily: fontDisplay,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              line.kind == LineKind.water
-                  ? '${line.title} · ${water.$1} من ${water.$2}'
-                  : line.title,
-              style: TextStyle(
-                fontSize: 13,
-                color: line.done ? c.muted : c.ink2,
-              ),
-            ),
-          ),
-          ?action,
-        ],
-      ),
-    );
-  }
-}
-
-class _MiniPill extends StatelessWidget {
-  const _MiniPill({required this.label, required this.onTap});
-  final String label;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    final c = context.c;
     return Semantics(
-      button: true,
+      button: onTap != null,
+      label: '${line.title} ${fmtTime(line.minute)}',
+      excludeSemantics: true,
       child: InkWell(
-        borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 32),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            decoration: BoxDecoration(
-              color: c.card,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: c.line),
-            ),
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontFamily: fontDisplay,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+        borderRadius: BorderRadius.circular(R.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Icon(
+                line.done ? Icons.check : iconFor(icon),
+                size: 14,
+                color: line.done ? c.good : color,
               ),
-            ),
+              const SizedBox(width: 6),
+              Text(
+                '${fmtTime(line.minute)} · ${line.title}',
+                style: T.micro.copyWith(
+                  color: line.done ? c.muted : c.ink2,
+                  fontWeight: FontWeight.w400,
+                  decoration: line.done ? TextDecoration.lineThrough : null,
+                  decorationColor: c.muted,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _Dashes(color: c.line)),
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+class _Dashes extends StatelessWidget {
+  const _Dashes({required this.color});
+  final Color color;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, cons) {
+      final n = (cons.maxWidth / 6).floor();
+      return Row(
+        children: [
+          for (var i = 0; i < n; i++)
+            Container(
+              width: 3,
+              height: 1,
+              margin: const EdgeInsetsDirectional.only(end: 3),
+              color: color,
+            ),
+        ],
+      );
+    },
+  );
 }
