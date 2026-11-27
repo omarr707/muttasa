@@ -234,6 +234,25 @@ class AppController extends Notifier<AppData> {
         clearTimer: true,
       ),
     );
+    // الطلعة مع أشخاص تُحسب تواصلًا معهم.
+    final outing = outingKindOf(i.key);
+    if (outing != null) {
+      final kind = outing;
+      for (final pid in state.contacts.outing(kind).people) {
+        final key = 'contact:$pid';
+        if (state.logs[recordKey(d, key)]?.status == ItemStatus.done) continue;
+        await _putLog(
+          ItemLog(
+            date: d,
+            itemKey: key,
+            status: ItemStatus.done,
+            doneAt: when,
+            category: 'contacts',
+            title: i.title,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> setStatus(Day d, PlanItem i, ItemStatus s) => _putLog(
@@ -884,4 +903,15 @@ class AppController extends Notifier<AppData> {
 
 extension FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// نوع الطلعة من مفتاح العنصر: «outing:friends» أو طلعة منقولة ليوم بديل
+/// «once:outing-friends-…».
+OutingKind? outingKindOf(String key) {
+  for (final k in OutingKind.values) {
+    if (key == 'outing:${k.name}' || key.startsWith('once:outing-${k.name}-')) {
+      return k;
+    }
+  }
+  return null;
 }

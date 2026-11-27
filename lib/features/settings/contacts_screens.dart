@@ -9,9 +9,7 @@ import '../../core/widgets.dart';
 import '../../state/providers.dart';
 import 'settings_screen.dart';
 
-String _people(int n) => n == 1
-    ? 'شخص واحد'
-    : (n == 2 ? 'شخصان' : '${nums(n)} ${n <= 10 ? 'أشخاص' : 'شخصًا'}');
+String _people(int n) => peopleCount(n);
 
 /// الإعدادات › التواصل مع الناس: المفتاح والمستوى والأشخاص والجدولة.
 class ContactsSettingsPage extends ConsumerWidget {
@@ -152,6 +150,38 @@ class _SchedulingGroup extends ConsumerWidget {
           title: 'لا تقترح وقت الدوام',
           toggle: cfg.avoidWork,
           onToggle: (v) => ctrl.updateContacts(cfg.copyWith(avoidWork: v)),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'أيام بدون اقتراحات',
+                style: T.body.copyWith(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final d in weekOrder)
+                    FilterChip(
+                      label: Text(arabicWeekdays[d]!),
+                      selected: cfg.excludedDays.contains(d),
+                      showCheckmark: false,
+                      onSelected: (on) => ctrl.updateContacts(
+                        cfg.copyWith(
+                          excludedDays: on
+                              ? {...cfg.excludedDays, d}
+                              : ({...cfg.excludedDays}..remove(d)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
         if (withVisits)
           SettingsRow(
@@ -332,9 +362,27 @@ class _PersonEditPageState extends ConsumerState<PersonEditPage> {
     text: widget.person?.giftBudget?.toString() ?? '',
   );
   late Relation _relation = widget.person?.relation ?? Relation.family;
-  late ContactFreq _freq = widget.person?.freq ?? ContactFreq.biweekly;
-  late ContactMethod _method = widget.person?.method ?? ContactMethod.call;
+  late ContactFreq _freq =
+      widget.person?.freq ?? relationDefaults(Relation.family).$1;
+  late ContactMethod _method =
+      widget.person?.method ?? relationDefaults(Relation.family).$2;
   late bool _pinned = widget.person?.pinned ?? false;
+
+  /// الإعدادات المتقدمة مطوية: التكرار والطريقة تأتي من العلاقة تلقائيًا.
+  late bool _advanced =
+      widget.person != null &&
+      relationDefaults(widget.person!.relation) !=
+          (widget.person!.freq, widget.person!.method);
+  late bool _custom = _advanced;
+
+  void _setRelation(Relation r) => setState(() {
+    _relation = r;
+    if (!_custom) {
+      final d = relationDefaults(r);
+      _freq = d.$1;
+      _method = d.$2;
+    }
+  });
   late List<Occasion> _occasions = [...?widget.person?.occasions];
 
   @override
@@ -482,77 +530,117 @@ class _PersonEditPageState extends ConsumerState<PersonEditPage> {
               values: Relation.values,
               labels: [for (final r in Relation.values) r.label],
               selected: _relation,
-              onChanged: (v) => setState(() => _relation = v),
+              onChanged: _setRelation,
             ),
-            label('كم مرة؟'),
-            Segmented<ContactFreq>(
-              values: ContactFreq.values,
-              labels: [for (final f in ContactFreq.values) f.label],
-              selected: _freq,
-              onChanged: (v) => setState(() => _freq = v),
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 4, 0),
+              child: Text(
+                'نقترح ${_method.label} ${_freq.label}، والتطبيق يوزّعها على أسابيعك تلقائيًا.',
+                style: T.meta.copyWith(color: c.muted),
+              ),
             ),
-            label('الطريقة'),
-            Segmented<ContactMethod>(
-              values: ContactMethod.values,
-              labels: [for (final m in ContactMethod.values) m.label],
-              selected: _method,
-              onChanged: (v) => setState(() => _method = v),
-            ),
-            const SizedBox(height: 12),
-            SettingsGroup(
-              children: [
-                SettingsRow(
-                  icon: Icons.push_pin_outlined,
-                  title: 'ثبّته',
-                  subtitle: 'يُقترح بتكراره دائمًا، خارج العدد الأسبوعي',
-                  toggle: _pinned,
-                  onToggle: (v) => setState(() => _pinned = v),
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(R.sm),
+              onTap: () => setState(() => _advanced = !_advanced),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.tune, size: 18, color: c.accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      'التكرار والطريقة والمناسبات',
+                      style: T.label.copyWith(color: c.accent),
+                    ),
+                    Icon(
+                      _advanced ? Icons.expand_less : Icons.expand_more,
+                      color: c.accent,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-            SettingsGroup(
-              title: 'مناسباته',
-              children: [
-                SettingsRow(
-                  icon: Icons.cake_outlined,
-                  title: 'عيد الميلاد',
-                  value: occ(OccasionKind.birthday),
-                  onTap: () => _addOccasion(OccasionKind.birthday),
-                ),
-                SettingsRow(
-                  icon: Icons.celebration_outlined,
-                  title: 'الزواج',
-                  value: occ(OccasionKind.wedding),
-                  onTap: () => _addOccasion(OccasionKind.wedding),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: Row(
-                    children: [
-                      const IconSquare(Icons.redeem_outlined, size: 32),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'ميزانية الهدية',
-                          style: T.body.copyWith(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 110,
-                        child: TextField(
-                          controller: _budget,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: const InputDecoration(suffixText: 'ر.س'),
-                        ),
-                      ),
-                    ],
+            if (_advanced) ...[
+              label('كم مرة؟'),
+              Segmented<ContactFreq>(
+                values: ContactFreq.values,
+                labels: [for (final f in ContactFreq.values) f.label],
+                selected: _freq,
+                onChanged: (v) => setState(() {
+                  _freq = v;
+                  _custom = true;
+                }),
+              ),
+              label('الطريقة'),
+              Segmented<ContactMethod>(
+                values: ContactMethod.values,
+                labels: [for (final m in ContactMethod.values) m.label],
+                selected: _method,
+                onChanged: (v) => setState(() {
+                  _method = v;
+                  _custom = true;
+                }),
+              ),
+              const SizedBox(height: 12),
+              SettingsGroup(
+                children: [
+                  SettingsRow(
+                    icon: Icons.push_pin_outlined,
+                    title: 'ثبّته',
+                    subtitle: 'يُقترح بتكراره دائمًا، خارج العدد الأسبوعي',
+                    toggle: _pinned,
+                    onToggle: (v) => setState(() => _pinned = v),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
+            if (_advanced)
+              SettingsGroup(
+                title: 'مناسباته',
+                children: [
+                  SettingsRow(
+                    icon: Icons.cake_outlined,
+                    title: 'عيد الميلاد',
+                    value: occ(OccasionKind.birthday),
+                    onTap: () => _addOccasion(OccasionKind.birthday),
+                  ),
+                  SettingsRow(
+                    icon: Icons.celebration_outlined,
+                    title: 'الزواج',
+                    value: occ(OccasionKind.wedding),
+                    onTap: () => _addOccasion(OccasionKind.wedding),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Row(
+                      children: [
+                        const IconSquare(Icons.redeem_outlined, size: 32),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'ميزانية الهدية',
+                            style: T.body.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 110,
+                          child: TextField(
+                            controller: _budget,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            decoration: const InputDecoration(
+                              suffixText: 'ر.س',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 20),
             PrimaryButton(label: 'حفظ', onPressed: _save),
           ],

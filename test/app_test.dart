@@ -135,11 +135,29 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
+    // «وش يتكرر في أسبوعك؟»: دوام ودراسة جامعية.
+    expect(find.text('وش يتكرر في أسبوعك؟'), findsOneWidget);
+    await tester.tap(find.text('دوام'));
+    await tester.tap(find.text('دراسة جامعية'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
     expect(find.text('كيف يمشي يومك؟'), findsOneWidget);
+    // الجامعة تنضاف لالتزاماتك تلقائيًا.
+    await tester.ensureVisible(find.text('محاضرة'));
+    expect(find.text('محاضرة'), findsOneWidget);
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
     expect(find.text('وش تبغى يكون في يومك؟'), findsOneWidget);
+    await tester.ensureVisible(find.text('الرياضة'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('الرياضة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    expect(find.text('مين تبغى تتواصل معه؟'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).last, 'أمي');
+    await tester.tap(find.text('أضف للقائمة'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
@@ -156,7 +174,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    expect(find.bySemanticsLabel(RegExp('^إنجاز اليوم')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('^إنجازك')), findsOneWidget);
     expect(find.text('يومي'), findsOneWidget);
     final data = await repo.loadAll();
     expect(data.profile!.city, 'الرياض');
@@ -168,10 +186,18 @@ void main() {
         'quran:wird',
         'reminders',
         'habit:walk',
+        'habit:study',
         'work',
       ]),
     );
+    expect(
+      data.rules.map((r) => r.config).whereType<ClassConfig>().single.type,
+      CommitmentType.university,
+    );
+    expect(data.profile!.roles, {'work', 'university'});
     expect(data.contacts.enabled, isTrue);
+    expect(data.people.single.name, 'أمي');
+    expect(data.people.single.method, ContactMethod.call);
 
     // الإعدادات تبويب رابع، والتواصل داخلها.
     await tester.tap(find.text('الإعدادات'));
@@ -186,7 +212,7 @@ void main() {
     // «روتيني» و«أهدافي» تفتح.
     await tester.tap(find.text('روتيني'));
     await tester.pumpAndSettle();
-    expect(find.text('مواعيدك الثابتة'), findsOneWidget);
+    expect(find.text('التزاماتي'), findsOneWidget);
     await tester.tap(find.text('أهدافي'));
     await tester.pumpAndSettle();
     expect(find.text('العادات'), findsOneWidget);

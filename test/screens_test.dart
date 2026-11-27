@@ -301,11 +301,14 @@ void main() {
     bool friday = false,
     AppData? data,
     FixedClock Function()? clock,
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = const Size(390 * 2, 844 * 2);
     tester.view.devicePixelRatio = 2;
     tester.platformDispatcher.platformBrightnessTestValue = brightness;
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
     final repo = Repository(AppDatabase.memory(), 'test');
     await tester.pumpWidget(
       ProviderScope(
@@ -344,6 +347,52 @@ void main() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/day_timeline2.png'),
+    );
+  });
+
+  testWidgets('تنفّس: نافذة الزهرة', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('تنفّس'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/breathe_ready.png'),
+    );
+    await tester.tap(find.text('ابدأ'));
+    for (var k = 0; k < 38; k++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/breathe_inhale.png'),
+    );
+    await tester.tap(find.text('أنهِ الآن'));
+    await tester.pumpAndSettle();
+    expect(find.text('أحسنت'), findsOneWidget);
+  });
+
+  testWidgets('إضافة تواصل لشخص', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byTooltip('إضافة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تواصل'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('أمي'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/add_contact.png'),
+    );
+    await tester.ensureVisible(find.text('أضف').last);
+    await tester.tap(find.text('أضف').last);
+    await tester.pumpAndSettle();
+    final ctx = tester.element(find.byType(CustomScrollView));
+    final container = ProviderScope.containerOf(ctx);
+    final today = container.read(todayProvider);
+    final plan = container.read(dayPlanProvider(today));
+    expect(
+      plan.items.where((i) => i.kind == ItemKind.contact && i.oneOffId != null),
+      isNotEmpty,
     );
   });
 
@@ -410,6 +459,148 @@ void main() {
     find.byType(MaterialApp),
     matchesGoldenFile('goldens/$name.png'),
   );
+
+  testWidgets('ساعات: شبكة اليوم', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('ساعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid2');
+  });
+
+  testWidgets('ساعات داكن', (tester) async {
+    await pumpApp(tester, brightness: Brightness.dark);
+    await tester.tap(find.text('ساعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid_dark');
+  });
+
+  testWidgets('الطلعات والإعدادات داكن', (tester) async {
+    await pumpApp(tester, brightness: Brightness.dark);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_dark');
+    await tester.scrollUntilVisible(find.text('الطلعات'), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الطلعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'outings_dark');
+    await tester.tap(find.text('طلعة العائلة').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'outings_family_dark');
+  });
+
+  testWidgets('خط كبير', (tester) async {
+    await pumpApp(tester, textScale: 1.3);
+    await shot(tester, 'day_large');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    await shot(tester, 'day_large2');
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_large');
+  });
+
+  testWidgets('رسالة: القوالب', (tester) async {
+    await pumpApp(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    final btn = find.text('هنّئ');
+    await tester.ensureVisible(btn.first);
+    await tester.pumpAndSettle();
+    await tester.tap(btn.first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'message_sheet');
+  });
+
+  testWidgets('جولة ٦: حركة، يوم خفيف، مراجعة، إعدادات العادات وصحتي', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('حركة'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'move_ready');
+    await tester.tap(find.text('ابدأ'));
+    await tester.pump(const Duration(seconds: 3));
+    await shot(tester, 'move_running');
+    await tester.tap(find.text('أنهِ الآن'));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('تمّ'));
+    await tester.pumpAndSettle();
+
+    final review = find.text('افتحها');
+    if (review.evaluate().isNotEmpty) {
+      await tester.tap(review.first);
+      await tester.pumpAndSettle();
+      await shot(tester, 'weekly_review');
+      await tester.tapAt(const Offset(200, 40));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byTooltip('رتّب أو خفّف يومي'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('يوم خفيف'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'light_day');
+    await tester.tapAt(const Offset(200, 40));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    final rem = find.text('الماء والحركة والتنفّس');
+    if (rem.evaluate().isEmpty) return;
+    await tester.ensureVisible(rem.first);
+    await tester.tap(rem.first);
+    await tester.pumpAndSettle();
+    final edit = find.text('عدّل');
+    if (edit.evaluate().isNotEmpty) {
+      await tester.tap(edit.first);
+      await tester.pumpAndSettle();
+      await shot(tester, 'reminders_editor');
+      await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await shot(tester, 'reminders_editor2');
+      await tester.tap(find.byType(CloseButton).first);
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('صحتي والالتزامات', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('صحتي'), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('صحتي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_editor');
+    await tester.tap(find.text('+ أضف متابعة'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_check');
+    await tester.tap(find.text('احفظ').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('احفظ').last);
+    await tester.pumpAndSettle();
+    await shot(tester, 'health_preview');
+    await tester.tap(find.text('طبّق على المتبقي اليوم'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_health');
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('+ أضف التزامًا'));
+    await tester.tap(find.text('+ أضف التزامًا'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'commitment_menu');
+    await tester.tap(find.text('الجامعة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('نفس الوقت كل الأيام'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'commitment_editor');
+  });
 
   testWidgets('الأهداف والتقرير والادخار', (tester) async {
     await pumpApp(tester);
@@ -485,14 +676,14 @@ void main() {
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
     await shot(tester, 'settings');
-    await tester.ensureVisible(find.text('المظهر'));
+    await tester.scrollUntilVisible(find.text('المظهر'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('المظهر'));
     await tester.pumpAndSettle();
     await shot(tester, 'appearance');
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('التواصل مع الناس'));
+    await tester.scrollUntilVisible(find.text('التواصل مع الناس'), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text('التواصل مع الناس'));
     await tester.pumpAndSettle();
@@ -532,7 +723,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('رمضان · اليوم ٢'), findsOneWidget);
+    expect(find.text('رمضان · اليوم 2'), findsOneWidget);
     await shot(tester, 'ramadan_day');
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
@@ -578,7 +769,7 @@ void main() {
         ],
       ),
     );
-    expect(find.text('إجازة حتى ٣٠ نوفمبر'), findsOneWidget);
+    expect(find.text('إجازة حتى 30 نوفمبر'), findsOneWidget);
     await shot(tester, 'vacation_day');
   });
 
@@ -608,11 +799,20 @@ void main() {
     await shot(tester, 'onboard_city');
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('دراسة جامعية'));
+    await tester.tap(find.text('أطفال'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_about');
+    await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
     await shot(tester, 'onboard_day');
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
     await shot(tester, 'onboard_interests');
     await tester.tap(find.text('التالي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'onboard_people');
+    await tester.tap(find.text('أضيفهم بعدين'));
     await tester.pumpAndSettle();
     await shot(tester, 'onboard_summary');
   });

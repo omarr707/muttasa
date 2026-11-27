@@ -17,7 +17,7 @@ class NotificationTap {
   final Day date;
   final String itemKey;
 
-  /// 'done' أو 'snooze' أو null (فتح).
+  /// 'done' أو 'snooze' أو 'call' أو null (فتح).
   final String? action;
 }
 
@@ -53,12 +53,32 @@ class NotificationService {
           actions: [
             DarwinNotificationAction.plain(
               'done',
-              'تمت',
+              'تمّ',
               options: {DarwinNotificationActionOption.foreground},
             ),
             DarwinNotificationAction.plain(
               'snooze',
-              'أجّل ساعة',
+              'بعد ساعة',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+          ],
+        ),
+        DarwinNotificationCategory(
+          'contact',
+          actions: [
+            DarwinNotificationAction.plain(
+              'call',
+              'اتصل',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              'snooze',
+              'بعد ساعة',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              'done',
+              'تمّ',
               options: {DarwinNotificationActionOption.foreground},
             ),
           ],
@@ -138,7 +158,8 @@ class NotificationService {
     if (!_ready) return;
     try {
       await _plugin.cancelAllPendingNotifications();
-      for (final n in list.take(60)) {
+      final cap = defaultTargetPlatform == TargetPlatform.iOS ? 60 : 240;
+      for (final n in list.take(cap)) {
         final ch = _channels[n.kind]!;
         final when = tz.TZDateTime.from(n.when, tz.local);
         if (when.isBefore(tz.TZDateTime.now(tz.local))) continue;
@@ -162,23 +183,31 @@ class NotificationService {
               category: n.kind == NotifyKind.prayer
                   ? AndroidNotificationCategory.reminder
                   : null,
-              actions: n.actionable
-                  ? const [
-                      AndroidNotificationAction(
-                        'done',
-                        'تمت',
-                        showsUserInterface: true,
-                      ),
-                      AndroidNotificationAction(
+              actions: !n.actionable
+                  ? null
+                  : [
+                      if (n.contact)
+                        const AndroidNotificationAction(
+                          'call',
+                          'اتصل',
+                          showsUserInterface: true,
+                        ),
+                      const AndroidNotificationAction(
                         'snooze',
-                        'أجّل ساعة',
+                        'بعد ساعة',
                         showsUserInterface: true,
                       ),
-                    ]
-                  : null,
+                      const AndroidNotificationAction(
+                        'done',
+                        'تمّ',
+                        showsUserInterface: true,
+                      ),
+                    ],
             ),
             iOS: DarwinNotificationDetails(
-              categoryIdentifier: n.actionable ? 'item' : null,
+              categoryIdentifier: !n.actionable
+                  ? null
+                  : (n.contact ? 'contact' : 'item'),
               // مستوى الانتباه time-sensitive للصلاة والمواعيد فقط.
               interruptionLevel:
                   (n.kind == NotifyKind.prayer ||
@@ -195,14 +224,19 @@ class NotificationService {
   }
 }
 
-/// يجمع خطط التنبيه للأيام الثلاثة القادمة.
+/// يجمع خطط التنبيه للأيام القادمة: أسبوع على أندرويد، وثلاثة أيام على iOS
+/// (حد ٦٤ تنبيهًا معلّقًا). كل فتح للتطبيق يعيد الجدولة من جديد.
 List<PlannedNotification> notificationWindow(
   ScheduleEngine engine,
   AppSettings s,
   Day today,
   int now,
 ) => [
-  for (var k = 0; k < 3; k++)
+  for (
+    var k = 0;
+    k < (defaultTargetPlatform == TargetPlatform.iOS ? 3 : 7);
+    k++
+  )
     ...planNotifications(
       engine.day(today.add(k)),
       s,

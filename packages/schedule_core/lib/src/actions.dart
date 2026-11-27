@@ -15,13 +15,18 @@ class MoveCheck {
 }
 
 /// ConflictChecker: السحب أو النقل يحافظ على المدة، ويرد بالسبب.
-MoveCheck checkMove(DayPlan plan, PlanItem item, int newStart) {
+MoveCheck checkMove(
+  DayPlan plan,
+  PlanItem item,
+  int newStart, {
+  Set<String> soft = const {},
+}) {
   final s = newStart, e = newStart + item.duration;
   if (s < 0 || e > minutesPerDay) {
     return MoveCheck.blocked('خارج اليوم', nearestFree(plan, item, newStart));
   }
   for (final b in plan.busy) {
-    if (b.key == item.key) continue;
+    if (b.key == item.key || soft.contains(b.key)) continue;
     if (!b.span.overlapsRange(s, e)) continue;
     String reason;
     switch (b.kind) {
@@ -176,4 +181,75 @@ String statusLabel(PlanItem i, {required bool isToday, required int now}) {
       if (isToday && i.start <= now && now < i.end) return 'الآن';
       return '';
   }
+}
+
+/// نتيجة «نزحزح اللي بعده؟»: البدايات الجديدة للعناصر اللاحقة.
+class ReflowResult {
+  const ReflowResult(this.moves, this.overlapped);
+
+  /// itemKey → البداية الجديدة.
+  final Map<String, int> moves;
+
+  /// العناصر القابلة للتحريك التي يتداخل معها الوقت الجديد مباشرة.
+  final List<PlanItem> overlapped;
+
+  bool get needed => overlapped.isNotEmpty;
+}
+
+/// يُحرَّك تلقائيًا: ليس صلاة ولا دوامًا ولا مشوار أولاد ولا حصة، وليس من تقويم
+/// أو للشريك، ولم يُسجَّل بعد.
+bool isMovable(PlanItem i) =>
+    !{
+      ItemKind.prayer,
+      ItemKind.work,
+      ItemKind.kid,
+      ItemKind.klass,
+    }.contains(i.kind) &&
+    !i.partner &&
+    i.category != 'health' &&
+    i.source == null &&
+    i.status == ItemStatus.pending;
+
+/// عند وضع [item] في [newStart]: نزحزح العناصر اللاحقة المتداخلة واحدًا بعد واحد
+/// إلى أول فراغ بعد سابقتها، مع احترام الثابت والنوم.
+ReflowResult reflowAfter(DayPlan plan, PlanItem item, int newStart) {
+  final s = newStart, e = newStart + item.duration;
+  final later =
+      plan.items
+          .where((i) => i.key != item.key && isMovable(i) && i.start >= s)
+          .toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
+  final overlapped = [
+    for (final i in plan.items)
+      if (i.key != item.key && isMovable(i) && i.start < e && s < i.end) i,
+  ];
+  if (overlapped.isEmpty) return const ReflowResult({}, []);
+  final laterKeys = {for (final i in later) i.key, item.key};
+  // المحجوز الثابت فقط، والعناصر اللاحقة تُضاف بأماكنها الجديدة.
+  final busy = <Busy>[
+    for (final b in plan.busy)
+      if (!laterKeys.contains(b.key)) b,
+    Busy(Span(s, e), BusyKind.fixed, item.title, key: item.key),
+  ];
+  final end = plan.bedtime.clamp(0, minutesPerDay);
+  final moves = <String, int>{};
+  for (final i in later) {
+    if (ScheduleEngine.isFree(busy, i.start, i.end)) {
+      busy.add(Busy(Span(i.start, i.end), BusyKind.fixed, i.title, key: i.key));
+      continue;
+    }
+    int? t;
+    for (var m = ((i.start + 4) ~/ 5) * 5; m + i.duration <= end; m += 5) {
+      if (ScheduleEngine.isFree(busy, m, m + i.duration)) {
+        t = m;
+        break;
+      }
+    }
+    if (t == null) continue;
+    moves[i.key] = t;
+    busy.add(
+      Busy(Span(t, t + i.duration), BusyKind.fixed, i.title, key: i.key),
+    );
+  }
+  return ReflowResult(moves, overlapped);
 }

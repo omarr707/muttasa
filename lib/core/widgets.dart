@@ -703,7 +703,7 @@ class SettingsRow extends StatelessWidget {
                 else if (onTap != null)
                   Padding(
                     padding: const EdgeInsetsDirectional.only(start: 4),
-                    child: Icon(Icons.chevron_left, size: 20, color: c.muted),
+                    child: Icon(Icons.chevron_right, size: 20, color: c.muted),
                   ),
               ],
             ),

@@ -6,6 +6,7 @@ import '../../core/icons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../state/providers.dart';
+import 'item_card.dart';
 
 /// عمل من أعمال الجمعة: يُضاف كمهمة لمرة واحدة بمعرّف ثابت لليوم.
 class _Deed {
@@ -53,6 +54,9 @@ bool shouldShowFriday(WidgetRef ref, Day date) {
   if (date != today || date.weekday != DateTime.friday) return false;
   if (data.profile?.islam != true || !data.settings.fridaySheet) return false;
   if (data.meta['friday.seen'] == date.key) return false;
+  // الورقة تفيد قبل الصلاة فقط؛ بعدها تبقى البطاقة في الجدول.
+  final plan = ref.read(dayPlanProvider(date));
+  if (ref.read(nowMinuteProvider) >= _jumuahStart(plan)) return false;
   return !data.oneOffs.any((o) => o.id.startsWith(_fridayPrefix(date)));
 }
 
@@ -249,9 +253,9 @@ class FridayCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
-    final prefix = 'once:${_fridayPrefix(date)}';
-    final items = plan.items.where((i) => i.key.startsWith(prefix)).toList();
-    final lines = plan.lines.where((l) => l.key.startsWith(prefix)).toList();
+    final prefix = isFridayChild;
+    final items = plan.items.where((i) => prefix(i.key)).toList();
+    final lines = plan.lines.where((l) => prefix(l.key)).toList();
     if (items.isEmpty && lines.isEmpty) return const SizedBox.shrink();
     final total = items.length + (lines.isEmpty ? 0 : 1);
     final done =
@@ -261,18 +265,17 @@ class FridayCard extends ConsumerWidget {
     final next = items
         .where((i) => i.status == ItemStatus.pending && i.end > now)
         .firstOrNull;
-    return Material(
-      color: c.card,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: c.card,
         borderRadius: BorderRadius.circular(R.lg),
-        side: BorderSide(color: c.line),
+        border: Border.all(color: c.line),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(R.lg),
-        onTap: next == null ? null : () => Scrollable.ensureVisible(context),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
               IconSquare(iconFor('kahf'), bg: c.accentSoft, fg: c.accent),
               const SizedBox(width: 10),
@@ -283,7 +286,7 @@ class FridayCard extends ConsumerWidget {
                     const Text('أعمال يوم الجمعة', style: T.cardTitle),
                     Text(
                       [
-                        fmtCount(done, total),
+                        '${fmtCount(done, total)} تمّت',
                         if (next != null) 'التالي: ${next.title}',
                       ].join(' · '),
                       maxLines: 1,
@@ -305,8 +308,34 @@ class FridayCard extends ConsumerWidget {
               ),
             ],
           ),
-        ),
+          if (items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 16, top: 6),
+              child: ChildItems(items: items, date: date),
+            ),
+          for (final l in lines.take(1))
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: 30, top: 6),
+              child: Row(
+                children: [
+                  Icon(iconFor('salawat'), size: 16, color: c.muted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${l.title} · ${nums(lines.length)} تذكيرات خفيفة',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.micro.copyWith(color: c.muted),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 }
+
+/// عناصر أعمال الجمعة تظهر داخل بطاقتها الأب لا في الجدول.
+bool isFridayChild(String key) => key.startsWith('once:friday-');

@@ -22,6 +22,8 @@ Future<RuleConfig?> editRuleConfig(
     AdhkarConfig() => _AdhkarEditor(initial: initial),
     RemindersConfig() => _RemindersEditor(initial: initial),
     SavingsConfig() => _SavingsEditor(initial: initial),
+    HealthConfig() => _HealthEditor(initial: initial),
+    MotherConfig() => _MotherEditor(initial: initial),
   };
   return Navigator.of(context).push<RuleConfig>(
     MaterialPageRoute(builder: (_) => page, fullscreenDialog: true),
@@ -397,9 +399,18 @@ class _ClassEditorState extends State<_ClassEditor> {
   late final _title = TextEditingController(text: widget.initial.title);
   late final _who = TextEditingController(text: widget.initial.who);
   late final _place = TextEditingController(text: widget.initial.place ?? '');
-  late Set<int> _days = widget.initial.weekdays;
+  late CommitmentType _type = widget.initial.type;
+  late Set<int> _days = widget.initial.slots.isNotEmpty
+      ? widget.initial.slots.keys.toSet()
+      : widget.initial.weekdays;
   late int _start = widget.initial.start;
   late int _end = widget.initial.end;
+
+  /// «نفس الوقت كل الأيام» أو فترات لكل يوم (ولو أكثر من فترة).
+  late bool _same = widget.initial.slots.isEmpty;
+  late final Map<int, List<Slot>> _slots = {
+    for (final e in widget.initial.slots.entries) e.key: [...e.value],
+  };
 
   @override
   void dispose() {
@@ -409,54 +420,154 @@ class _ClassEditorState extends State<_ClassEditor> {
     super.dispose();
   }
 
+  List<Slot> _daySlots(int d) => _slots[d] ??= [Slot(_start, _end)];
+
+  bool get _valid {
+    if (_title.text.trim().isEmpty || _days.isEmpty) return false;
+    if (_same) return _end > _start;
+    return _days.every((d) => _daySlots(d).every((s) => s.end > s.start));
+  }
+
   @override
-  Widget build(BuildContext context) => _EditorScaffold(
-    title: 'حصة أو دورة',
-    canSave: _title.text.trim().isNotEmpty && _days.isNotEmpty && _end > _start,
-    onSave: () => Navigator.pop(
-      context,
-      ClassConfig(
-        title: _title.text.trim(),
-        who: _who.text.trim().isEmpty ? 'أنا' : _who.text.trim(),
-        weekdays: _days,
-        start: _start,
-        end: _end,
-        place: _place.text.trim().isEmpty ? null : _place.text.trim(),
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return _EditorScaffold(
+      title: 'التزام',
+      canSave: _valid,
+      onSave: () => Navigator.pop(
+        context,
+        ClassConfig(
+          title: _title.text.trim(),
+          who: _who.text.trim().isEmpty ? 'أنا' : _who.text.trim(),
+          weekdays: _days,
+          start: _same ? _start : _daySlots(_days.first).first.start,
+          end: _same ? _end : _daySlots(_days.first).first.end,
+          place: _place.text.trim().isEmpty ? null : _place.text.trim(),
+          type: _type,
+          slots: _same
+              ? const {}
+              : {
+                  for (final d in _days)
+                    d: ([..._daySlots(d)]
+                      ..sort((a, b) => a.start.compareTo(b.start))),
+                },
+        ),
       ),
-    ),
-    children: [
-      const FieldLabel('الاسم'),
-      TextField(
-        controller: _title,
-        onChanged: (_) => setState(() {}),
-        decoration: const InputDecoration(hintText: 'مثل: حصة موسيقى'),
-      ),
-      const FieldLabel('لمن؟'),
-      TextField(
-        controller: _who,
-        decoration: const InputDecoration(hintText: 'أنا، أو اسم الطفل'),
-      ),
-      const FieldLabel('المكان أو الرابط (اختياري)'),
-      TextField(controller: _place),
-      const FieldLabel('الأيام'),
-      WeekdayPicker(
-        selected: _days,
-        onChanged: (s) => setState(() => _days = s),
-      ),
-      const SizedBox(height: 12),
-      TimeField(
-        label: 'البداية',
-        value: _start,
-        onChanged: (v) => setState(() => _start = v),
-      ),
-      const SizedBox(height: 8),
-      TimeField(
-        label: 'النهاية',
-        value: _end,
-        onChanged: (v) => setState(() => _end = v),
-      ),
-    ],
-  );
+      children: [
+        const FieldLabel('النوع'),
+        ChoiceChips<CommitmentType>(
+          values: CommitmentType.values,
+          label: (t) => t.label,
+          selected: (t) => t == _type,
+          onSelected: (t) => setState(() {
+            final wasDefault =
+                _title.text.trim().isEmpty ||
+                CommitmentType.values.any(
+                  (x) => x.defaultTitle == _title.text.trim(),
+                );
+            _type = t;
+            if (wasDefault) _title.text = t.defaultTitle;
+          }),
+        ),
+        const FieldLabel('الاسم'),
+        TextField(
+          controller: _title,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            hintText: 'مثل: محاضرات الجامعة، نادي، دورة إنجليزي',
+          ),
+        ),
+        const FieldLabel('لمن؟'),
+        TextField(
+          controller: _who,
+          decoration: const InputDecoration(hintText: 'أنا، أو اسم الطفل'),
+        ),
+        const FieldLabel('المكان أو الرابط (اختياري)'),
+        TextField(controller: _place),
+        const FieldLabel('الأيام'),
+        WeekdayPicker(
+          selected: _days,
+          onChanged: (s) => setState(() => _days = s),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('نفس الوقت كل الأيام'),
+          subtitle: const Text('أطفها لو كل يوم له وقت، أو فيه أكثر من فترة'),
+          value: _same,
+          onChanged: (v) => setState(() => _same = v),
+        ),
+        if (_same) ...[
+          TimeField(
+            label: 'البداية',
+            value: _start,
+            onChanged: (v) => setState(() => _start = v),
+          ),
+          const SizedBox(height: 8),
+          TimeField(
+            label: 'النهاية',
+            value: _end,
+            onChanged: (v) => setState(() => _end = v),
+          ),
+        ] else
+          for (final d in weekOrder.where(_days.contains)) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 4),
+              child: Text(
+                arabicWeekdays[d]!,
+                style: T.label.copyWith(color: c.muted),
+              ),
+            ),
+            for (var k = 0; k < _daySlots(d).length; k++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TimeField(
+                        label: 'من',
+                        value: _daySlots(d)[k].start,
+                        onChanged: (v) => setState(
+                          () => _slots[d]![k] = Slot(v, _slots[d]![k].end),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TimeField(
+                        label: 'إلى',
+                        value: _daySlots(d)[k].end,
+                        onChanged: (v) => setState(
+                          () => _slots[d]![k] = Slot(_slots[d]![k].start, v),
+                        ),
+                      ),
+                    ),
+                    if (k > 0)
+                      IconButton(
+                        tooltip: 'احذف الفترة',
+                        onPressed: () => setState(() => _slots[d]!.removeAt(k)),
+                        icon: Icon(Icons.close, color: c.muted),
+                      ),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  final last = _daySlots(d).last;
+                  _slots[d]!.add(
+                    Slot(last.end + 15, (last.end + 75).clamp(0, 1439)),
+                  );
+                }),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('فترة ثانية'),
+              ),
+            ),
+          ],
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -950,58 +1061,125 @@ class _RemindersEditor extends StatefulWidget {
   State<_RemindersEditor> createState() => _RemindersEditorState();
 }
 
+/// الماء والحركة والتنفّس: لكل عادة أيامها وعدد تذكيراتها، منفصلة عن الدوام.
 class _RemindersEditorState extends State<_RemindersEditor> {
-  late bool _water = widget.initial.water;
-  late int _cups = widget.initial.cups;
-  late bool _stand = widget.initial.stand;
-  late bool _breathe = widget.initial.breathe;
+  late RemindersConfig _c = widget.initial;
+
+  void _set(RemindersConfig c) => setState(() => _c = c);
+
+  Widget _section(String title, String sub, bool on, ValueChanged<bool> f) =>
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(title, style: T.cardTitle),
+        subtitle: Text(sub),
+        value: on,
+        onChanged: f,
+      );
+
   @override
-  Widget build(BuildContext context) => _EditorScaffold(
-    title: 'تذكيرات قصيرة',
-    onSave: () => Navigator.pop(
-      context,
-      RemindersConfig(
-        water: _water,
-        cups: _cups,
-        stand: _stand,
-        breathe: _breathe,
-      ),
-    ),
-    children: [
-      Text(
-        'خطوط خفيفة بين البطاقات. ما تحجز وقت وما تنحسب في الإنجاز.',
-        style: TextStyle(color: context.c.ink2),
-      ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('الماء'),
-        subtitle: const Text('مع الوجبات والاستراحة، ثم نوزّع الباقي على يومك'),
-        value: _water,
-        onChanged: (v) => setState(() => _water = v),
-      ),
-      if (_water)
-        ChoiceChips<int>(
-          values: const [4, 6, 8, 10, 12],
-          label: (n) => '$n أكواب',
-          selected: (n) => n == _cups,
-          onSelected: (n) => setState(() => _cups = n),
+  Widget build(BuildContext context) {
+    final c = context.c;
+    Widget label(String t) => Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 6),
+      child: Text(t, style: T.label.copyWith(color: c.muted)),
+    );
+    return _EditorScaffold(
+      title: 'الماء والحركة والتنفّس',
+      onSave: () => Navigator.pop(context, _c),
+      children: [
+        Text(
+          'تظهر كل يوم تختاره، في الدوام والإجازة، وأوقاتها تتماشى مع يومك. ما تنحسب في الإنجاز.',
+          style: TextStyle(color: c.ink2),
         ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('الوقوف'),
-        subtitle: const Text('كل ساعتين داخل الدوام'),
-        value: _stand,
-        onChanged: (v) => setState(() => _stand = v),
-      ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('التنفّس'),
-        subtitle: const Text('دقيقة بعد العصر'),
-        value: _breathe,
-        onChanged: (v) => setState(() => _breathe = v),
-      ),
-    ],
-  );
+        const SizedBox(height: 8),
+        _section(
+          'الماء',
+          'أكواب الشرب فقط',
+          _c.water,
+          (v) => _set(_c.copyWith(water: v)),
+        ),
+        if (_c.water) ...[
+          label('هدفك اليومي'),
+          ChoiceChips<int>(
+            values: const [4, 6, 8, 10, 12],
+            label: (n) => nums('$n أكواب'),
+            selected: (n) => n == _c.cups,
+            onSelected: (n) => _set(_c.copyWith(cups: n)),
+          ),
+          label('كم تذكير؟'),
+          ChoiceChips<int?>(
+            values: const [null, 2, 4, 6],
+            label: (n) => n == null ? 'بعدد الأكواب' : nums('$n'),
+            selected: (n) => n == _c.waterAlerts,
+            onSelected: (n) => _set(
+              n == null
+                  ? _c.copyWith(clearAlerts: true)
+                  : _c.copyWith(waterAlerts: n),
+            ),
+          ),
+          label('الأيام'),
+          WeekdayPicker(
+            selected: _c.waterDays,
+            onChanged: (d) => _set(_c.copyWith(waterDays: d)),
+          ),
+        ],
+        const Divider(height: 28),
+        _section(
+          'تمرين حركة قصير',
+          'دقيقتين حركة خفيفة تكسر الجلوس',
+          _c.stand,
+          (v) => _set(_c.copyWith(stand: v)),
+        ),
+        if (_c.stand) ...[
+          label('كل كم؟'),
+          ChoiceChips<int>(
+            values: const [60, 90, 120, 180],
+            label: (m) => 'كل ${fmtDuration(m)}',
+            selected: (m) => m == _c.standEvery,
+            onSelected: (m) => _set(_c.copyWith(standEvery: m)),
+          ),
+          label('الأيام'),
+          WeekdayPicker(
+            selected: _c.standDays,
+            onChanged: (d) => _set(_c.copyWith(standDays: d)),
+          ),
+        ],
+        const Divider(height: 28),
+        _section(
+          'التنفّس',
+          'جلسة هادئة تتبع فيها الزهرة',
+          _c.breathe,
+          (v) => _set(_c.copyWith(breathe: v)),
+        ),
+        if (_c.breathe) ...[
+          label('متى؟ (تقدر تختار أكثر من وقت)'),
+          ChoiceChips<BreatheSlot>(
+            values: BreatheSlot.values,
+            label: (b) => b.label,
+            selected: _c.breatheSlots.contains,
+            onSelected: (b) {
+              final next = _c.breatheSlots.contains(b)
+                  ? ({..._c.breatheSlots}..remove(b))
+                  : {..._c.breatheSlots, b};
+              if (next.isNotEmpty) _set(_c.copyWith(breatheSlots: next));
+            },
+          ),
+          label('مدة الجلسة'),
+          ChoiceChips<int>(
+            values: const [1, 3, 5],
+            label: (m) => fmtDuration(m),
+            selected: (m) => m == _c.breatheMinutes,
+            onSelected: (m) => _set(_c.copyWith(breatheMinutes: m)),
+          ),
+          label('الأيام'),
+          WeekdayPicker(
+            selected: _c.breatheDays,
+            onChanged: (d) => _set(_c.copyWith(breatheDays: d)),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _SavingsEditor extends StatefulWidget {
@@ -1089,6 +1267,335 @@ class _SavingsEditorState extends State<_SavingsEditor> {
                   if (d != null) setState(() => _by = Day.fromDateTime(d));
                 },
               ),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// صحتي والحمل والطفل: تذكير وتسجيل فقط، بلا نصائح علاجية.
+// ---------------------------------------------------------------------------
+
+class _Disclaimer extends StatelessWidget {
+  const _Disclaimer(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.amberSoft,
+        borderRadius: BorderRadius.circular(R.md),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: c.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: T.meta.copyWith(color: c.ink)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthEditor extends StatefulWidget {
+  const _HealthEditor({required this.initial});
+  final HealthConfig initial;
+  @override
+  State<_HealthEditor> createState() => _HealthEditorState();
+}
+
+class _HealthEditorState extends State<_HealthEditor> {
+  late final List<HealthCheck> _checks = [...widget.initial.checks];
+
+  Future<void> _edit([int? index]) async {
+    final cur = index == null ? null : _checks[index];
+    final res = await showModalBottomSheet<HealthCheck>(
+      useRootNavigator: true,
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _HealthCheckSheet(initial: cur),
+    );
+    if (res == null) return;
+    setState(() {
+      if (index == null) {
+        _checks.add(res);
+      } else {
+        _checks[index] = res;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return _EditorScaffold(
+      title: 'صحتي',
+      onSave: () => Navigator.pop(context, HealthConfig(checks: [..._checks])),
+      children: [
+        const _Disclaimer(
+          'التطبيق يذكّرك ويسجّل قراءاتك فقط، وما يعطي نصيحة طبية. أوقات القياس والدواء حسب كلام طبيبك.',
+        ),
+        for (var k = 0; k < _checks.length; k++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: MCard(
+              onTap: () => _edit(k),
+              child: Row(
+                children: [
+                  Icon(iconFor(_checks[k].kind.icon), color: c.ink),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_checks[k].title, style: T.cardTitle),
+                        Text(
+                          nums(
+                            [
+                              ..._checks[k].times.map(fmtTime),
+                              fmtWeekdays(_checks[k].days),
+                            ].join(' · '),
+                          ),
+                          style: T.meta.copyWith(color: c.muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'احذف',
+                    onPressed: () => setState(() => _checks.removeAt(k)),
+                    icon: Icon(Icons.delete_outline, color: c.muted),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        PillButton(
+          label: '+ أضف متابعة',
+          soft: true,
+          expand: true,
+          onPressed: () => _edit(),
+        ),
+      ],
+    );
+  }
+}
+
+class _HealthCheckSheet extends StatefulWidget {
+  const _HealthCheckSheet({this.initial});
+  final HealthCheck? initial;
+  @override
+  State<_HealthCheckSheet> createState() => _HealthCheckSheetState();
+}
+
+class _HealthCheckSheetState extends State<_HealthCheckSheet> {
+  late HealthCheckKind _kind = widget.initial?.kind ?? HealthCheckKind.glucose;
+  late final _title = TextEditingController(
+    text: widget.initial?.title ?? HealthCheckKind.glucose.label,
+  );
+  late List<int> _times = [...?widget.initial?.times];
+  late Set<int> _days = widget.initial?.days ?? allWeekdays;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_times.isEmpty) _times = [7 * 60, 21 * 60];
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SheetHeader('متابعة صحية'),
+              ChoiceChips<HealthCheckKind>(
+                values: HealthCheckKind.values,
+                label: (k) => k.label,
+                selected: (k) => k == _kind,
+                onSelected: (k) => setState(() {
+                  if (HealthCheckKind.values.any(
+                    (x) => x.label == _title.text.trim(),
+                  )) {
+                    _title.text = k.label;
+                  }
+                  _kind = k;
+                }),
+              ),
+              const FieldLabel('الاسم'),
+              TextField(controller: _title),
+              const FieldLabel('الأوقات (حسب كلام طبيبك)'),
+              for (var k = 0; k < _times.length; k++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TimeField(
+                          label: 'المرة ${nums(k + 1)}',
+                          value: _times[k],
+                          onChanged: (v) => setState(() => _times[k] = v),
+                        ),
+                      ),
+                      if (_times.length > 1)
+                        IconButton(
+                          tooltip: 'احذف الوقت',
+                          onPressed: () => setState(() => _times.removeAt(k)),
+                          icon: const Icon(Icons.close),
+                        ),
+                    ],
+                  ),
+                ),
+              if (_times.length < 6)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => setState(
+                      () => _times.add((_times.last + 180) % minutesPerDay),
+                    ),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('وقت ثاني'),
+                  ),
+                ),
+              const FieldLabel('الأيام'),
+              WeekdayPicker(
+                selected: _days,
+                onChanged: (d) => setState(() => _days = d),
+              ),
+              const SizedBox(height: 16),
+              PrimaryButton(
+                label: 'احفظ',
+                onPressed: _title.text.trim().isEmpty || _days.isEmpty
+                    ? null
+                    : () => Navigator.pop(
+                        context,
+                        HealthCheck(
+                          id: widget.initial?.id ?? newId().substring(0, 8),
+                          kind: _kind,
+                          title: _title.text.trim(),
+                          times: [..._times]..sort(),
+                          days: _days,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MotherEditor extends StatefulWidget {
+  const _MotherEditor({required this.initial});
+  final MotherConfig initial;
+  @override
+  State<_MotherEditor> createState() => _MotherEditorState();
+}
+
+class _MotherEditorState extends State<_MotherEditor> {
+  late MotherConfig _m = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final born = _m.babyBorn;
+    final months = born == null
+        ? null
+        : (Day.fromDateTime(DateTime.now()).difference(born) / 30.4).floor();
+    return _EditorScaffold(
+      title: 'الحمل والطفل',
+      onSave: () => Navigator.pop(context, _m),
+      children: [
+        const _Disclaimer(
+          'تذكيرات بسيطة وتسجيل فقط. أي نشاط أو تغيير استشيري فيه طبيبتك. مواعيد المتابعة أضيفيها من زر «+».',
+        ),
+        Segmented<MotherStage>(
+          values: MotherStage.values,
+          labels: [for (final s in MotherStage.values) s.label],
+          selected: _m.stage,
+          onChanged: (s) => setState(() => _m = _m.copyWith(stage: s)),
+        ),
+        const SizedBox(height: 12),
+        if (_m.stage == MotherStage.pregnant) ...[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('مشي خفيف'),
+            subtitle: const Text('إذا وافقت عليه طبيبتك'),
+            value: _m.walk,
+            onChanged: (v) => setState(() => _m = _m.copyWith(walk: v)),
+          ),
+          if (_m.walk)
+            ChoiceChips<int>(
+              values: const [10, 15, 20, 30],
+              label: fmtDuration,
+              selected: (v) => v == _m.walkMinutes,
+              onSelected: (v) =>
+                  setState(() => _m = _m.copyWith(walkMinutes: v)),
+            ),
+        ] else ...[
+          SettingsRow(
+            icon: Icons.cake_outlined,
+            title: 'تاريخ ولادة الطفل',
+            value: born == null
+                ? 'اختر'
+                : nums('${born.day}/${born.month}/${born.year}'),
+            onTap: () async {
+              final now = DateTime.now();
+              final d = await showDatePicker(
+                context: context,
+                firstDate: now.subtract(const Duration(days: 365 * 2)),
+                lastDate: now,
+                initialDate: now.subtract(const Duration(days: 30)),
+              );
+              if (d != null) {
+                setState(() => _m = _m.copyWith(babyBorn: Day.fromDateTime(d)));
+              }
+            },
+          ),
+          if (months != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                months < 1
+                    ? 'عمر طفلك أقل من شهر'
+                    : 'عمر طفلك ${nums(months)} ${months <= 10 ? 'أشهر' : 'شهرًا'}',
+                style: T.meta.copyWith(color: c.muted),
+              ),
+            ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('تذكير الرضعات'),
+            subtitle: const Text('خط خفيف في يومك، وتسجّلين الرضعة بلمسة'),
+            value: _m.feeds,
+            onChanged: (v) => setState(() => _m = _m.copyWith(feeds: v)),
+          ),
+          if (_m.feeds)
+            ChoiceChips<int>(
+              values: const [120, 150, 180, 240],
+              label: (v) => 'كل ${fmtDuration(v)}',
+              selected: (v) => v == _m.feedEvery,
+              onSelected: (v) => setState(() => _m = _m.copyWith(feedEvery: v)),
             ),
         ],
       ],

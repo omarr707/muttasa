@@ -14,6 +14,7 @@ import '../routine/labels.dart';
 import '../routine/preview.dart';
 import '../routine/rule_editors.dart';
 import 'contacts_screens.dart';
+import 'outings_screen.dart';
 import 'season_screens.dart';
 
 void pushPage(BuildContext context, Widget page) =>
@@ -119,10 +120,18 @@ class SettingsScreen extends ConsumerWidget {
                 SettingsRow(
                   icon: Icons.forum_outlined,
                   title: 'التواصل مع الناس',
-                  subtitle: contacts.enabled
-                      ? 'مفعّل · ${nums(data.people.length)} ${data.people.length > 2 && data.people.length <= 10 ? 'أشخاص' : 'شخص'} · ${nums(contacts.level.perWeek)} في الأسبوع'
-                      : 'متوقف',
+                  subtitle: !contacts.enabled
+                      ? 'متوقف'
+                      : (data.people.isEmpty
+                            ? 'مفعّل · ما أضفت أحد بعد'
+                            : 'مفعّل · ${peopleCount(data.people.length)} · ${nums(contacts.level.perWeek)} في الأسبوع'),
                   onTap: () => pushPage(context, const ContactsSettingsPage()),
+                ),
+                SettingsRow(
+                  icon: Icons.local_cafe_outlined,
+                  title: 'الطلعات',
+                  subtitle: outingsSummary(contacts),
+                  onTap: () => pushPage(context, const OutingsPage()),
                 ),
                 SettingsRow(
                   icon: Icons.auto_stories_outlined,
@@ -133,17 +142,14 @@ class SettingsScreen extends ConsumerWidget {
                     p.copyWith(religion: v ? Religion.islam : Religion.none),
                   ),
                 ),
+                for (final k in const ['health', 'mother'])
+                  _PackRow(packKey: k),
                 SettingsRow(
                   icon: Icons.track_changes,
                   title: 'الأهداف',
                   toggle: s.goalsEnabled,
                   onToggle: (v) =>
                       ctrl.updateSettings(s.copyWith(goalsEnabled: v)),
-                ),
-                const SettingsRow(
-                  icon: Icons.savings_outlined,
-                  title: 'المال',
-                  subtitle: 'قريبًا',
                 ),
               ],
             ),
@@ -194,10 +200,21 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            SettingsGroup(
+              children: [
+                SettingsRow(
+                  icon: Icons.restart_alt,
+                  title: 'إعادة ضبط التطبيق',
+                  subtitle: 'تبدأ التهيئة من جديد، وتنحذف البيانات من الجهاز',
+                  danger: true,
+                  onTap: () => confirmReset(context, ref),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Center(
               child: Text(
-                'مُتَّسَع ${nums('0.3.0')}',
+                'مُتَّسَع ${nums('0.6.0')}',
                 style: T.micro.copyWith(color: context.c.muted),
               ),
             ),
@@ -663,8 +680,8 @@ class AppearancePage extends ConsumerWidget {
         ),
         label('الأرقام'),
         Segmented<bool>(
-          values: const [true, false],
-          labels: const ['١٢٣', '123'],
+          values: const [false, true],
+          labels: const ['123', '١٢٣'],
           selected: s.arabicDigits,
           onChanged: (v) => ctrl.updateSettings(s.copyWith(arabicDigits: v)),
         ),
@@ -745,36 +762,39 @@ class DataPage extends ConsumerWidget {
               title: 'ابدأ من جديد',
               subtitle: 'يحذف كل البيانات من هذا الجهاز',
               danger: true,
-              onTap: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('نحذف كل شيء؟'),
-                    content: const Text(
-                      'روتينك وسجلاتك تنحذف من هذا الجهاز. صدّر نسخة قبل إذا تبغى.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('إلغاء'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('احذف'),
-                      ),
-                    ],
-                  ),
-                );
-                if (ok == true) {
-                  await ctrl.resetAll();
-                  if (context.mounted) context.go('/onboarding');
-                }
-              },
+              onTap: () => confirmReset(context, ref),
             ),
           ],
         ),
       ],
     );
+  }
+}
+
+/// «إعادة ضبط التطبيق»: تأكيد ثم حذف كل البيانات والرجوع للتهيئة.
+Future<void> confirmReset(BuildContext context, WidgetRef ref) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('نعيد ضبط التطبيق؟'),
+      content: const Text(
+        'روتينك وسجلاتك تنحذف من هذا الجهاز وتبدأ التهيئة من أول. صدّر نسخة قبل إذا تبغى.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('أعد الضبط'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) {
+    await ref.read(appDataProvider.notifier).resetAll();
+    if (context.mounted) context.go('/onboarding');
   }
 }
 
@@ -953,5 +973,55 @@ Future<void> importBackup(BuildContext context, WidgetRef ref) async {
     if (context.mounted) toast(context, e.message);
   } catch (_) {
     if (context.mounted) toast(context, 'تعذّر قراءة الملف');
+  }
+}
+
+/// «صحتي» و«الحمل والطفل»: تفعيل يفتح الإعداد، والإطفاء يوقفها من اليوم.
+class _PackRow extends ConsumerWidget {
+  const _PackRow({required this.packKey});
+  final String packKey;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = ref.watch(todayProvider);
+    final rule = ref
+        .watch(engineProvider)
+        .rulesOn(today)
+        .where((r) => r.key == packKey)
+        .firstOrNull;
+    final health = packKey == 'health';
+    final initial =
+        rule?.config ?? (health ? const HealthConfig() : const MotherConfig());
+    Future<void> edit() async {
+      final cfg = await editRuleConfig(context, initial);
+      if (cfg == null || !context.mounted) return;
+      if (cfg is HealthConfig && cfg.checks.isEmpty) {
+        if (rule != null) {
+          await ref
+              .read(appDataProvider.notifier)
+              .removeRule(packKey, from: today);
+        }
+        return;
+      }
+      await saveWithPreview(context, ref, rule, cfg, key: packKey);
+    }
+
+    return SettingsRow(
+      icon: health ? Icons.monitor_heart_outlined : Icons.child_care_outlined,
+      title: health ? 'صحتي' : 'الحمل والطفل',
+      subtitle: rule == null
+          ? (health
+                ? 'تذكير وتسجيل قياس السكر والضغط والدواء'
+                : 'مشي خفيف للحامل، وتذكير الرضعات')
+          : ruleSummary(rule.config),
+      toggle: rule != null,
+      onToggle: (v) async {
+        if (v) return edit();
+        await ref
+            .read(appDataProvider.notifier)
+            .removeRule(packKey, from: today);
+      },
+      onTap: rule == null ? null : edit,
+    );
   }
 }

@@ -502,28 +502,54 @@ class ScheduleEngine {
             fixed.add(item);
           }
         }
+      } else if (c is HealthConfig) {
+        for (final h in c.checks) {
+          if (!h.days.contains(d.weekday)) continue;
+          final times = [...h.times]..sort();
+          for (var k = 0; k < times.length; k++) {
+            fixed.add(
+              PlanItem(
+                key: 'health:${h.id}#${k + 1}',
+                ruleKey: r.key,
+                kind: ItemKind.task,
+                title: h.title,
+                subtitle: h.kind.hasReading ? 'سجّل القراءة' : null,
+                icon: h.kind.icon,
+                start: times[k],
+                end: times[k] + 5,
+                fixed: true,
+                counted: true,
+                track: TrackMode.confirm,
+                category: 'health',
+              ),
+            );
+          }
+        }
       } else if (c is ClassConfig) {
         if (ctx.classesOff) continue;
-        if (!c.weekdays.contains(d.weekday)) continue;
-        fixed.add(
-          PlanItem(
-            key: r.key,
-            ruleKey: r.key,
-            kind: ItemKind.klass,
-            title: c.title,
-            subtitle: [
-              if (c.who != 'أنا') c.who,
-              if (c.place != null && c.place!.isNotEmpty) c.place!,
-            ].join(' · '),
-            icon: 'class',
-            start: c.start,
-            end: c.end,
-            fixed: true,
-            counted: true,
-            track: TrackMode.confirm,
-            category: 'fixed',
-          ),
-        );
+        final slots = c.slotsOn(d.weekday);
+        for (var k = 0; k < slots.length; k++) {
+          final sl = slots[k];
+          fixed.add(
+            PlanItem(
+              key: k == 0 ? r.key : '${r.key}#${k + 1}',
+              ruleKey: r.key,
+              kind: ItemKind.klass,
+              title: c.title,
+              subtitle: [
+                if (c.who != 'أنا') c.who,
+                if (c.place != null && c.place!.isNotEmpty) c.place!,
+              ].join(' · '),
+              icon: c.type.icon,
+              start: sl.start,
+              end: sl.end,
+              fixed: true,
+              counted: true,
+              track: TrackMode.confirm,
+              category: 'fixed',
+            ),
+          );
+        }
       }
     }
 
@@ -694,24 +720,31 @@ class ScheduleEngine {
     for (final o in todaysOneOffs.where(
       (o) => o.start == null && o.kind != OneOffKind.reminder,
     )) {
+      final contact = o.kind == OneOffKind.contact;
       queue.add(
         _Flex(
           key: o.itemKey,
           kind: o.kind == OneOffKind.habitSession
               ? ItemKind.habit
-              : ItemKind.task,
+              : (contact ? ItemKind.contact : ItemKind.task),
           ruleKey: o.habitKey,
           title: o.title,
           subtitle: o.note,
           icon:
-              o.icon ?? (o.kind == OneOffKind.habitSession ? 'star' : 'check'),
+              o.icon ??
+              (o.kind == OneOffKind.habitSession
+                  ? 'star'
+                  : (contact ? 'call' : 'check')),
           duration: o.duration,
           window: o.window,
           preferred: o.preferred,
           track: TrackMode.confirm,
-          category: o.kind == OneOffKind.habitSession ? 'habits' : 'tasks',
+          category: o.kind == OneOffKind.habitSession
+              ? 'habits'
+              : (contact ? 'contacts' : 'tasks'),
           isExtra: o.kind == OneOffKind.habitSession,
           oneOffId: o.id,
+          personId: o.personId,
         ),
       );
     }
@@ -737,6 +770,27 @@ class ScheduleEngine {
     for (final r in flexRules.where((r) => r.kind == RuleKind.habit)) {
       queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
     }
+    {
+      final m = _ruleOfKind<MotherConfig>(rules);
+      if (m != null && m.stage == MotherStage.pregnant && m.walk) {
+        queue.add(
+          _Flex(
+            key: 'mother:walk',
+            ruleKey: 'mother',
+            kind: ItemKind.habit,
+            title: 'مشي خفيف',
+            subtitle: 'بخطوة مريحة',
+            icon: 'walk',
+            duration: m.walkMinutes,
+            window: Window.afternoon,
+            track: TrackMode.confirm,
+            category: 'mother',
+          ),
+        );
+      }
+    }
+    // الطلعة قبل اقتراحات التواصل: أطول وأصعب في إيجاد مكان.
+    if (withWeekly) queue.addAll(_outingFlex(d, dayWake, bed));
     if (withWeekly) queue.addAll(_contactFlex(d, pr, dayWake, bed));
     final savings = _ruleOfKind<SavingsConfig>(rules);
     if (savings != null && savings.isPayDay(d)) {
@@ -825,6 +879,13 @@ class ScheduleEngine {
       final w = f.span ?? windowSpan(f.window, pr, dayWake, bed);
       var t = _search(busy, f.duration, w, f.preferred);
       // الاقتراح يسكت إن ما لقى وقت، فالأقل أفضل من الحشو.
+      if (t == null && f.key.startsWith('outing:')) {
+        // الطلعة ما تختفي: تظهر تحت «تحتاج موعدًا» مع يوم بديل.
+        unplaced.add(
+          Unplaced(f.key, f.title, UnplacedReason.noTime, duration: f.duration),
+        );
+        continue;
+      }
       if (t == null && f.span != null && f.isExtra) continue;
       if (t == null && f.window != Window.any) {
         t = _search(
@@ -907,6 +968,24 @@ class ScheduleEngine {
           fasting: ctx.fasting,
         ),
       );
+    }
+    final mother = _ruleOfKind<MotherConfig>(rules);
+    if (mother != null && mother.stage == MotherStage.infant && mother.feeds) {
+      final every = mother.feedEvery.clamp(60, 360);
+      var n = 0;
+      for (var t = dayWake + 30; t < bed.clamp(0, minutesPerDay); t += every) {
+        n++;
+        final key = 'feed#$n';
+        lines.add(
+          ReminderLine(
+            key: key,
+            kind: LineKind.custom,
+            minute: (t ~/ 5) * 5,
+            title: 'رضعة',
+            done: _log(d, key)?.status == ItemStatus.done,
+          ),
+        );
+      }
     }
     if (bed < minutesPerDay && !nightShiftTonight) {
       lines.add(
@@ -1018,10 +1097,13 @@ class ScheduleEngine {
       OneOffKind.period => ItemKind.period,
       OneOffKind.event => ItemKind.event,
       OneOffKind.habitSession => ItemKind.habit,
+      OneOffKind.contact => ItemKind.contact,
       _ => ItemKind.task,
     };
     final counted =
-        o.kind == OneOffKind.task || o.kind == OneOffKind.habitSession;
+        o.kind == OneOffKind.task ||
+        o.kind == OneOffKind.habitSession ||
+        o.kind == OneOffKind.contact;
     return PlanItem(
       key: o.itemKey,
       ruleKey: o.habitKey,
@@ -1033,6 +1115,7 @@ class ScheduleEngine {
           switch (kind) {
             ItemKind.event => 'event',
             ItemKind.period => 'period',
+            ItemKind.contact => 'call',
             _ => 'check',
           },
       start: start,
@@ -1040,9 +1123,14 @@ class ScheduleEngine {
       fixed: true,
       counted: counted,
       track: counted ? TrackMode.confirm : TrackMode.auto,
-      category: o.kind == OneOffKind.habitSession ? 'habits' : 'tasks',
+      category: switch (o.kind) {
+        OneOffKind.habitSession => 'habits',
+        OneOffKind.contact => 'contacts',
+        _ => 'tasks',
+      },
       isExtra: o.kind == OneOffKind.habitSession,
       oneOffId: o.id,
+      personId: o.personId,
     );
   }
 
@@ -1356,8 +1444,13 @@ class ScheduleEngine {
       if (prev == null || l.date.isAfter(prev)) last[pid] = l.date;
     }
     Day lastOf(Person p) => last[p.id] ?? p.addedAt.add(-p.freq.days);
-    bool due(Person p) => !lastOf(p).add(p.freq.days).isAfter(ws.add(6));
+    // الأولوية: مناسبة خلال أسبوع، ثم الأطول بدون تواصل.
+    bool soon(Person p) => occasionSoon(p, ws, days: 6);
+    bool due(Person p) =>
+        soon(p) || !lastOf(p).add(p.freq.days).isAfter(ws.add(6));
     int byStale(Person a, Person b) {
+      final o = (soon(b) ? 1 : 0) - (soon(a) ? 1 : 0);
+      if (o != 0) return o;
       final x = lastOf(a).compareTo(lastOf(b));
       return x != 0 ? x : a.name.compareTo(b.name);
     }
@@ -1372,8 +1465,13 @@ class ScheduleEngine {
         p.method == ContactMethod.visit && c.visitsWeekendOnly;
     final visits = all.where(weekendVisit).toList();
     final chosen = all.where((p) => !weekendVisit(p)).toList();
-    final weekendDays = [
+    var allowed = [
       for (var i = 0; i < 7; i++)
+        if (!c.excludedDays.contains(ws.add(i).weekday)) i,
+    ];
+    if (allowed.isEmpty) allowed = [for (var i = 0; i < 7; i++) i];
+    final weekendDays = [
+      for (final i in allowed)
         if (_p.weekend.contains(ws.add(i).weekday)) ws.add(i),
     ];
     for (var k = 0; k < visits.length; k++) {
@@ -1383,10 +1481,56 @@ class ScheduleEngine {
       out.putIfAbsent(day, () => []).add(visits[k]);
     }
     final n = chosen.length;
+    final len = allowed.length;
     for (var k = 0; k < n; k++) {
-      // توزيع متساوٍ على الأيام السبعة، من منتصف كل حصة.
-      final idx = ((k * 7 + 3) ~/ n).clamp(0, 6) % 7;
-      out.putIfAbsent(ws.add(idx), () => []).add(chosen[k]);
+      // توزيع متساوٍ على الأيام المسموحة، من منتصف كل حصة.
+      final idx = ((k * len + len ~/ 2) ~/ n).clamp(0, len - 1);
+      out.putIfAbsent(ws.add(allowed[idx]), () => []).add(chosen[k]);
+    }
+    return out;
+  }
+
+  /// يوم الطلعة في أسبوعها: أول يوم مسموح في الأسبوع، كل [everyWeeks] أسبوع
+  /// بدءًا من أسبوع التسجيل.
+  Day? outingDay(OutingConfig o, Day anyDay) {
+    if (!o.enabled || o.days.isEmpty) return null;
+    final ws = anyDay.weekStart;
+    final weeks = ws.difference(_p.joinDay.weekStart) ~/ 7;
+    if (weeks < 0 || weeks % o.everyWeeks.clamp(1, 8) != 0) return null;
+    for (var i = 0; i < 7; i++) {
+      if (o.days.contains(ws.add(i).weekday)) return ws.add(i);
+    }
+    return null;
+  }
+
+  List<_Flex> _outingFlex(Day d, int wake, int bed) {
+    final out = <_Flex>[];
+    for (final o in input.contacts.outings) {
+      if (outingDay(o, d) != d) continue;
+      final names = [
+        for (final id in o.people)
+          ...input.people.where((p) => p.id == id).map((p) => p.name),
+      ];
+      final end = bed.clamp(0, minutesPerDay);
+      out.add(
+        _Flex(
+          key: o.itemKey,
+          kind: ItemKind.event,
+          title: o.kind.label,
+          subtitle: names.isEmpty ? null : 'مع ${names.join('، ')}',
+          icon: o.kind.icon,
+          duration: o.duration,
+          window: Window.night,
+          span: Span(
+            o.windowStart.clamp(wake, end),
+            o.windowEnd.clamp(wake, end),
+          ),
+          preferred: o.windowStart,
+          track: TrackMode.confirm,
+          category: 'outings',
+          isExtra: true,
+        ),
+      );
     }
     return out;
   }
@@ -1487,7 +1631,7 @@ class ScheduleEngine {
   }) {
     final out = <ReminderLine>[];
     final end = bed.clamp(0, minutesPerDay);
-    if (c.water && c.cups > 0) {
+    if (c.water && c.cups > 0 && c.waterDays.contains(d.weekday)) {
       // في الصيام: الماء بعد الإفطار فقط.
       final from = fasting ? pr.maghrib : wake;
       // مرتبطة بالوجبات والاستراحة، ثم توزيع على الفراغات الكبيرة. لا «كوب كل ساعة».
@@ -1517,7 +1661,7 @@ class ScheduleEngine {
         // مرسيان متقاربان يصيران تذكيرًا واحدًا.
         if (times.isEmpty || m - times.last >= 20) times.add(m);
       }
-      while (!fasting && times.length < c.cups && times.length < 16) {
+      while (!fasting && times.length < c.alerts && times.length < 16) {
         // أكبر فجوة بين المراسي.
         final pts = [from, ...times, end - 30];
         var bestGap = 0, bestAt = -1;
@@ -1532,53 +1676,93 @@ class ScheduleEngine {
         times.add((bestAt ~/ 5) * 5);
         times.sort();
       }
-      times = times.take(c.cups).toList();
+      times = times.take(c.alerts).toList();
       final drank = waterMl(_log(d, 'water')?.value);
       final per = (input.settings.waterGoalMl / c.cups).round().clamp(1, 5000);
       final cupsDone = drank ~/ per;
       for (var i = 0; i < times.length; i++) {
+        // التذكير يُعد منجزًا إذا وصل الشرب لحصته من الهدف.
+        final need = ((i + 1) * c.cups / times.length).ceil();
         out.add(
           ReminderLine(
             key: 'water#${i + 1}',
             kind: LineKind.water,
             minute: times[i],
             title: 'اشرب ماء',
-            done: i < cupsDone,
+            done: cupsDone >= need,
           ),
         );
       }
     }
-    if (c.stand) {
-      var n = 0;
-      for (final i in items.where((i) => i.kind == ItemKind.work)) {
-        for (var t = i.start + 90; t < i.end - 30; t += 120) {
-          if (i.workBreak != null && i.workBreak!.contains(t)) continue;
-          n++;
-          out.add(
-            ReminderLine(
-              key: 'stand#$n',
-              kind: LineKind.stand,
-              minute: t,
-              title: 'قم وتحرّك دقيقتين',
-            ),
-          );
-        }
+    // نقطة فاضية قريبة من [t]: لو وقعت داخل موعد (غير الدوام) ننقلها لبعده.
+    int freeNear(int t) {
+      for (var k = 0; k < 6; k++) {
+        final hit = items
+            .where(
+              (i) =>
+                  i.kind != ItemKind.work &&
+                  i.status == ItemStatus.pending &&
+                  i.start <= t &&
+                  i.end > t,
+            )
+            .firstOrNull;
+        if (hit == null) return t;
+        t = hit.end + 5;
       }
+      return t;
     }
-    if (c.breathe) {
-      final at = ((pr.asr + 45) ~/ 5) * 5;
-      if (at > wake && at < end) {
+
+    if (c.stand && c.standDays.contains(d.weekday) && !fasting) {
+      // الحركة على مدار اليقظة، في الدوام والإجازة، لا داخل الدوام فقط.
+      final every = c.standEvery.clamp(45, 240);
+      var n = 0;
+      int? last;
+      for (var t = wake + 90; t < end - 60 && n < 10; t += every) {
+        var m = freeNear(t);
+        final inBreak = items.any(
+          (i) => i.workBreak != null && i.workBreak!.contains(m),
+        );
+        if (inBreak || m >= end - 45) continue;
+        m = (m ~/ 5) * 5;
+        if (last != null && m - last < 40) continue;
+        last = m;
+        n++;
+        final key = 'stand#$n';
         out.add(
           ReminderLine(
-            key: 'breathe',
-            kind: LineKind.breathe,
-            minute: at,
-            title: 'تنفّس بعمق دقيقة',
-            done: _log(d, 'breathe')?.status == ItemStatus.done,
+            key: key,
+            kind: LineKind.stand,
+            minute: m,
+            title: 'تمرين حركة قصير',
+            done: _log(d, key)?.status == ItemStatus.done,
           ),
         );
       }
     }
+    if (c.breathe && c.breatheDays.contains(d.weekday)) {
+      for (final slot in BreatheSlot.values) {
+        if (!c.breatheSlots.contains(slot)) continue;
+        final raw = switch (slot) {
+          BreatheSlot.morning => wake + 45,
+          BreatheSlot.afternoon => pr.asr + 45,
+          BreatheSlot.night => end - 40,
+        };
+        final at = (freeNear(raw) ~/ 5) * 5;
+        if (at <= wake || at >= end) continue;
+        out.add(
+          ReminderLine(
+            key: slot.key,
+            kind: LineKind.breathe,
+            minute: at,
+            title: c.breatheMinutes == 1
+                ? 'تنفّس بعمق دقيقة'
+                : 'تنفّس بعمق ${c.breatheMinutes} دقائق',
+            done: _log(d, slot.key)?.status == ItemStatus.done,
+          ),
+        );
+      }
+    }
+    out.sort((a, b) => a.minute.compareTo(b.minute));
     return out;
   }
 }

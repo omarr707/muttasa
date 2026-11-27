@@ -7,6 +7,7 @@ import 'package:schedule_core/schedule_core.dart';
 
 import 'core/theme.dart';
 import 'router.dart';
+import 'services/contact_actions.dart';
 import 'services/notifications.dart';
 import 'state/providers.dart';
 
@@ -85,6 +86,13 @@ class _MuttasaAppState extends ConsumerState<MuttasaApp>
     final item = plan.byKey(t.itemKey);
     if (item != null && t.action == 'done') {
       await ctrl.markDone(t.date, item);
+    } else if (item != null && t.action == 'call') {
+      final person = ref
+          .read(appDataProvider)
+          .people
+          .where((p) => p.id == item.personId)
+          .firstOrNull;
+      if (person != null) await openContact(person, call: true);
     } else if (item != null && t.action == 'snooze') {
       final slot = postponeHourSlot(plan, item, ref.read(nowMinuteProvider));
       if (slot != null) await ctrl.postponeHour(t.date, item, slot);

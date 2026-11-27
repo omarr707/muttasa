@@ -49,9 +49,13 @@ String fmtRange(int start, int end) {
   final (h2, m2, p2) = _hm(end);
   String t(int h, int m) => '$h:${m.toString().padLeft(2, '0')}';
   String p(bool pm) => pm ? 'م' : 'ص';
-  if (p1 == p2) return nums('${t(h1, m1)}–${t(h2, m2)} ${p(p2)}');
-  return nums('${t(h1, m1)} ${p(p1)}–${t(h2, m2)} ${p(p2)}');
+  if (p1 == p2) return nums('${t(h1, m1)} – ${t(h2, m2)} ${p(p2)}');
+  return nums('${t(h1, m1)} ${p(p1)} – ${t(h2, m2)} ${p(p2)}');
 }
+
+/// للتفاصيل: «من 5:35 م إلى 6:05 م».
+String fmtRangeLong(int start, int end) =>
+    'من ${fmtTime(start)} إلى ${fmtTime(end)}';
 
 /// الساعة فقط للعمود الجانبي: «5 م».
 String fmtHour(int minute) {
@@ -64,8 +68,14 @@ String fmtHour(int minute) {
 /// المدة بالعربية: «10 دقائق»، «ساعة»، «ساعة ونص»، «ساعتين».
 String fmtDuration(int minutes) => nums(_duration(minutes));
 
+String _minutes(int n) => switch (n) {
+  1 => 'دقيقة',
+  2 => 'دقيقتين',
+  _ => '$n ${_minuteWord(n)}',
+};
+
 String _duration(int minutes) {
-  if (minutes < 60) return '$minutes ${_minuteWord(minutes)}';
+  if (minutes < 60) return _minutes(minutes);
   final h = minutes ~/ 60;
   final r = minutes % 60;
   String hs;
@@ -79,7 +89,7 @@ String _duration(int minutes) {
   if (r == 0) return hs;
   if (r == 30) return '$hs ونص';
   if (r == 15) return '$hs وربع';
-  return '$hs و$r ${_minuteWord(r)}';
+  return '$hs و${_minutes(r)}';
 }
 
 String _minuteWord(int n) => (n >= 3 && n <= 10) ? 'دقائق' : 'دقيقة';
@@ -156,3 +166,12 @@ String fmtWeekdays(Set<int> days) {
 
 /// «5 ديسمبر».
 String fmtDayShort(Day d) => nums('${d.day} ${arabicMonths[d.month - 1]}');
+
+/// «شخص واحد»، «شخصان»، «3 أشخاص»، «12 شخصًا».
+String peopleCount(int n) => switch (n) {
+  0 => 'ما فيه أحد',
+  1 => 'شخص واحد',
+  2 => 'شخصان',
+  <= 10 => nums('$n أشخاص'),
+  _ => nums('$n شخصًا'),
+};

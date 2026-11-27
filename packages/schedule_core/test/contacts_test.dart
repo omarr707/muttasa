@@ -105,11 +105,78 @@ void main() {
   });
 
   test('صيغة الوقت: الفترة تُكتب مرة واحدة، والأرقام حسب الإعداد', () {
-    expect(fmtRange(5 * 60 + 19, 5 * 60 + 39), '5:19–5:39 ص');
-    expect(fmtRange(11 * 60 + 48, 12 * 60 + 33), '11:48 ص–12:33 م');
+    expect(fmtRange(5 * 60 + 19, 5 * 60 + 39), '5:19 – 5:39 ص');
+    expect(fmtRange(11 * 60 + 48, 12 * 60 + 33), '11:48 ص – 12:33 م');
     useArabicDigits = true;
-    expect(fmtRange(5 * 60 + 19, 5 * 60 + 39), '٥:١٩–٥:٣٩ ص');
+    expect(fmtRange(5 * 60 + 19, 5 * 60 + 39), '٥:١٩ – ٥:٣٩ ص');
     expect(fmtCount(2, 8), '٢ من ٨');
     useArabicDigits = false;
+  });
+
+  EngineInput withCfg(ContactsConfig c) {
+    final base = withContacts();
+    return EngineInput(
+      profile: base.profile,
+      settings: base.settings,
+      rules: base.rules,
+      logs: const {},
+      people: people,
+      contacts: c,
+      prayers: base.prayers,
+      today: base.today,
+      nowMinute: 0,
+    );
+  }
+
+  test('أيام بدون اقتراحات ما ينحط فيها تواصل', () {
+    final e = ScheduleEngine(
+      withCfg(
+        const ContactsConfig(
+          enabled: true,
+          level: ContactLevel.high,
+          excludedDays: {DateTime.thursday, DateTime.friday},
+        ),
+      ),
+    );
+    final week = e.contactWeek(sat);
+    expect(week, isNotEmpty);
+    for (final d in week.keys) {
+      expect(d.weekday, isNot(anyOf(DateTime.thursday, DateTime.friday)));
+    }
+  });
+
+  test('طلعة العائلة تنحجز يوم الجمعة داخل فترتها', () {
+    final c = cfg.withOuting(
+      cfg.outing(OutingKind.family).copyWith(enabled: true, everyWeeks: 1),
+    );
+    final e = ScheduleEngine(withCfg(c));
+    for (var k = 0; k < 7; k++) {
+      final d = sat.add(k);
+      final item = e.day(d).byKey('outing:family');
+      if (d.weekday == DateTime.friday) {
+        expect(item, isNotNull);
+        expect(item!.start, greaterThanOrEqualTo(16 * 60 + 30));
+        expect(item.end, lessThanOrEqualTo(21 * 60));
+      } else {
+        expect(item, isNull);
+      }
+    }
+  });
+
+  test('نزحزح اللي بعده: العناصر المرنة اللاحقة تنزاح بدون تداخل', () {
+    final e = ScheduleEngine(withContacts());
+    final plan = e.day(const Day(2026, 11, 27));
+    final movable = plan.items.where(isMovable).toList();
+    expect(movable, isNotEmpty);
+    final first = movable.first;
+    final to = first.start + 45;
+    final r = reflowAfter(plan, first, to);
+    for (final entry in r.moves.entries) {
+      final it = plan.byKey(entry.key)!;
+      expect(entry.value, greaterThanOrEqualTo(it.start));
+      // ما يتداخل مع العنصر بعد نقله.
+      final end = entry.value + it.duration;
+      expect(end <= to || entry.value >= to + first.duration, isTrue);
+    }
   });
 }

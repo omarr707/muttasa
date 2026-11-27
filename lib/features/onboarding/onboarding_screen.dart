@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:schedule_core/schedule_core.dart';
 
+import '../../core/icons.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/defaults.dart';
@@ -21,32 +23,127 @@ class _Interest {
     this.id,
     this.label,
     this.icon,
-    this.rules, {
+    this.rules,
+    this.desc, {
     this.islam = false,
+    this.tags = const {},
+    this.notFor = const {},
   });
   final String id;
+  final String desc;
   final String label;
   final IconData icon;
   final List<String> rules;
   final bool islam;
+
+  /// الأوضاع اللي يناسبها (يظهر أولًا كـ«مقترح لك»). فاضي = يناسب الكل.
+  final Set<String> tags;
+
+  /// قيم الجنس اللي ما يظهر لها.
+  final Set<String> notFor;
 }
 
+/// «وش يتكرر في أسبوعك؟»: اختيار متعدد.
+const _roleOptions = <(String, String, IconData)>[
+  ('work', 'دوام', Icons.work_outline),
+  ('university', 'دراسة جامعية', Icons.account_balance_outlined),
+  ('school', 'مدرسة', Icons.backpack_outlined),
+  ('kids', 'أطفال', Icons.child_care_outlined),
+  ('freelance', 'عمل حر', Icons.laptop_mac),
+  ('pregnant', 'حمل', Icons.pregnant_woman),
+  ('infant', 'طفل رضيع', Icons.crib_outlined),
+  ('retired', 'متقاعد', Icons.weekend_outlined),
+];
+
+const _ages = ['أقل من 18', '18–24', '25–34', '35–44', '45–59', '60+'];
+
 const _interests = [
-  _Interest('prayer', 'الصلاة في وقتها', Icons.mosque_outlined, [
-    'prayers',
-    'adhkar',
-  ], islam: true),
-  _Interest('quran', 'القرآن', Icons.auto_stories_outlined, [
-    'quran:wird',
-  ], islam: true),
-  _Interest('sport', 'الرياضة', Icons.directions_walk, ['habit:walk']),
-  _Interest('read', 'القراءة', Icons.menu_book_outlined, ['habit:read']),
-  _Interest('lang', 'تعلّم لغة', Icons.translate, ['habit:language']),
-  _Interest('water', 'شرب الماء', Icons.water_drop_outlined, ['reminders']),
-  _Interest('family', 'وقت مع الأهل', Icons.family_restroom, []),
-  _Interest('people', 'التواصل مع الناس', Icons.forum_outlined, []),
-  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, []),
-  _Interest('save', 'الادخار', Icons.savings_outlined, []),
+  _Interest(
+    'prayer',
+    'الصلاة في وقتها',
+    Icons.mosque_outlined,
+    ['prayers', 'adhkar'],
+    'المواقيت والأذكار',
+    islam: true,
+  ),
+  _Interest(
+    'quran',
+    'القرآن',
+    Icons.auto_stories_outlined,
+    ['quran:wird'],
+    'ورد يومي أو ختمة',
+    islam: true,
+  ),
+  _Interest(
+    'study',
+    'المذاكرة',
+    Icons.school_outlined,
+    ['habit:study'],
+    'جلسات بين المحاضرات',
+    tags: {'university', 'school'},
+  ),
+  _Interest(
+    'kids',
+    'وقت مع الأطفال',
+    Icons.child_care_outlined,
+    ['habit:kids'],
+    'نصف ساعة كل يوم',
+    tags: {'kids'},
+  ),
+  _Interest(
+    'mother',
+    'الحمل والطفل',
+    Icons.pregnant_woman,
+    [],
+    'مشي خفيف وتذكير الرضعات',
+    tags: {'pregnant', 'infant'},
+    notFor: {'male'},
+  ),
+  _Interest(
+    'health',
+    'صحتي',
+    Icons.monitor_heart_outlined,
+    [],
+    'قياس السكر والضغط والدواء',
+  ),
+  _Interest('sport', 'الرياضة', Icons.directions_walk, [
+    'habit:walk',
+  ], 'مشي أو تمرين'),
+  _Interest('read', 'القراءة', Icons.menu_book_outlined, [
+    'habit:read',
+  ], 'صفحات كل يوم'),
+  _Interest('lang', 'تعلّم لغة', Icons.translate, [
+    'habit:language',
+  ], 'جلسات قصيرة'),
+  _Interest('water', 'الماء والحركة', Icons.water_drop_outlined, [
+    'reminders',
+  ], 'ماء، حركة قصيرة، تنفّس'),
+  _Interest(
+    'family',
+    'وقت مع الأهل',
+    Icons.family_restroom,
+    [],
+    'طلعات وزيارات',
+    tags: {'kids', 'retired'},
+  ),
+  _Interest(
+    'people',
+    'التواصل مع الناس',
+    Icons.forum_outlined,
+    [],
+    'اتصال ورسالة',
+  ),
+  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, [
+    'habit:winddown',
+  ], 'تجهيز قبل النوم'),
+  _Interest(
+    'save',
+    'الادخار',
+    Icons.savings_outlined,
+    ['savings'],
+    'يوم الراتب',
+    tags: {'work', 'freelance'},
+  ),
 ];
 
 enum _Work { none, fixed, shifts }
@@ -74,8 +171,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Set<int>? _workDays;
   WorkConfig? _shifts;
   final Set<String> _picked = {'prayer', 'quran', 'water', 'people'};
+
+  // «عنك»: كلها اختيارية.
+  final Set<String> _roles = {};
+  String? _age;
+  String? _gender;
+  bool _showAll = false;
+  bool _workTouched = false;
+
+  /// التزامات الجامعة والمدرسة وغيرها، تدخل الجدول أولًا.
+  final List<ClassConfig> _commitments = [];
+  HealthConfig? _health;
+  MotherConfig? _mother;
   bool _remind = true;
   bool _generating = false;
+
+  // «مين تبغى تتواصل معه؟»: أسماء فقط، والتطبيق يوزّع.
+  final _people = <Person>[];
+  final _personName = TextEditingController();
+  String? _personPhone;
+  Relation _personRelation = Relation.family;
+  ContactLevel _level = ContactLevel.mid;
+
+  bool get _wantsPeople => _picked.contains('people');
 
   bool get _islam {
     // مفعّل افتراضيًا في الدول المضمّنة، ويُطفأ من الإعدادات ‹ الأقسام.
@@ -99,6 +217,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void dispose() {
     _pages.dispose();
     _search.dispose();
+    _personName.dispose();
     super.dispose();
   }
 
@@ -132,10 +251,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         children: [
                           IconButton(
                             tooltip: 'رجوع',
-                            onPressed: () => _go(_step - 1),
+                            onPressed: () => _go(
+                              _step == 6 && !_wantsPeople ? 4 : _step - 1,
+                            ),
                             icon: const Icon(Icons.arrow_forward, size: 20),
                           ),
-                          for (var i = 1; i <= 4; i++)
+                          for (var i = 1; i <= 6; i++)
                             Expanded(
                               child: Container(
                                 height: 3,
@@ -149,13 +270,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               ),
                             ),
                           const SizedBox(width: 8),
-                          if (_step < 4)
+                          if (_step < 6)
                             TextButton(
                               style: TextButton.styleFrom(
                                 foregroundColor: c.muted,
                                 textStyle: T.label,
                               ),
-                              onPressed: () => _go(_step + 1),
+                              onPressed: () => _go(
+                                _step == 4 && !_wantsPeople ? 6 : _step + 1,
+                              ),
                               child: const Text('تخطَّ'),
                             )
                           else
@@ -170,8 +293,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       children: [
                         _welcome(),
                         _cityStep(),
+                        _aboutStep(),
                         _dayStep(),
                         _interestsStep(),
+                        _peopleStep(),
                         _summaryStep(),
                       ],
                     ),
@@ -243,7 +368,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const Spacer(flex: 2),
           Text(
-            'أربع أسئلة قصيرة، وكل شيء قابل للتعديل بعدين.',
+            'أسئلة قصيرة، وكل شيء قابل للتعديل بعدين.',
             style: T.meta.copyWith(color: c.muted),
           ),
           const SizedBox(height: 10),
@@ -346,6 +471,160 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
+  /// «عنك»: وش يتكرر في أسبوعك، والعمر والجنس اختياريًا. يرتّب ما بعدها.
+  Widget _aboutStep() {
+    final c = context.c;
+    Widget chips(
+      List<String> values,
+      String? sel,
+      ValueChanged<String?> f, {
+      Map<String, String>? labels,
+    }) => Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final v in values)
+          ChoiceChip(
+            label: Text(nums(labels?[v] ?? v)),
+            selected: sel == v,
+            showCheckmark: false,
+            onSelected: (on) => setState(() => f(on ? v : null)),
+          ),
+      ],
+    );
+    return _page(
+      title: 'وش يتكرر في أسبوعك؟',
+      subtitle: 'اختر كل اللي ينطبق عليك، ونرتّب الاقتراحات على وضعك.',
+      children: [
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 2.6,
+          children: [
+            for (final r in _roleOptions)
+              if (!(_gender == 'male' && {'pregnant', 'infant'}.contains(r.$1)))
+                _RoleTile(
+                  label: r.$2,
+                  icon: r.$3,
+                  on: _roles.contains(r.$1),
+                  onTap: () => setState(
+                    () => _roles.contains(r.$1)
+                        ? _roles.remove(r.$1)
+                        : _roles.add(r.$1),
+                  ),
+                ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Text('عمرك (اختياري)', style: T.label.copyWith(color: c.muted)),
+        const SizedBox(height: 8),
+        chips(_ages, _age, (v) => _age = v),
+        const SizedBox(height: 16),
+        Text('الجنس (اختياري)', style: T.label.copyWith(color: c.muted)),
+        const SizedBox(height: 8),
+        chips(const ['male', 'female'], _gender, (v) {
+          _gender = v;
+          if (v == 'male') _roles.removeAll({'pregnant', 'infant'});
+        }, labels: const {'male': 'ذكر', 'female': 'أنثى'}),
+      ],
+      next: 'التالي',
+      onNext: () {
+        _applyRoles();
+        _go(3);
+      },
+    );
+  }
+
+  /// نعبّي الاختيارات الأولية حسب الوضع (والمستخدم يقدر يغيّرها).
+  void _applyRoles() {
+    setState(() {
+      if (!_workTouched) {
+        _work = _roles.contains('work') ? _Work.fixed : _Work.none;
+      }
+      for (final i in _interests) {
+        if (i.tags.isNotEmpty &&
+            i.tags.any(_roles.contains) &&
+            !i.notFor.contains(_gender)) {
+          _picked.add(i.id);
+        }
+      }
+      if (_picked.contains('mother')) {
+        _mother ??= MotherConfig(
+          stage: _roles.contains('infant') && !_roles.contains('pregnant')
+              ? MotherStage.infant
+              : MotherStage.pregnant,
+        );
+      }
+      for (final (role, type) in const [
+        ('university', CommitmentType.university),
+        ('school', CommitmentType.school),
+      ]) {
+        final has = _commitments.any((c) => c.type == type);
+        if (_roles.contains(role) && !has) {
+          _commitments.add(_presetCommitment(type));
+        } else if (!_roles.contains(role) && has) {
+          _commitments.removeWhere((c) => c.type == type);
+        }
+      }
+    });
+  }
+
+  ClassConfig _presetCommitment(CommitmentType t) => ClassConfig(
+    title: t.defaultTitle,
+    type: t,
+    weekdays: workdays(_weekend),
+    start: t == CommitmentType.school ? 7 * 60 : 8 * 60,
+    end: t == CommitmentType.school ? 13 * 60 + 30 : 12 * 60,
+  );
+
+  Widget _commitmentsGroup() {
+    final c = context.c;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        Text('التزاماتك', style: T.label.copyWith(color: c.muted)),
+        const SizedBox(height: 8),
+        SettingsGroup(
+          children: [
+            for (var k = 0; k < _commitments.length; k++)
+              SettingsRow(
+                icon: iconFor(_commitments[k].type.icon),
+                title: _commitments[k].title,
+                subtitle: ruleSummary(_commitments[k]),
+                onTap: () async {
+                  final cfg = await editRuleConfig(
+                    context,
+                    _commitments[k],
+                    weekend: _weekend,
+                  );
+                  if (cfg is ClassConfig) {
+                    setState(() => _commitments[k] = cfg);
+                  }
+                },
+              ),
+            SettingsRow(
+              icon: Icons.add,
+              title: 'أضف التزامًا',
+              subtitle: 'محاضرات، مدرسة، نادي، دورة',
+              onTap: () async {
+                final cfg = await editRuleConfig(
+                  context,
+                  _presetCommitment(CommitmentType.other),
+                  weekend: _weekend,
+                );
+                if (cfg is ClassConfig) setState(() => _commitments.add(cfg));
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _dayStep() {
     final c = context.c;
     Widget timeRow(String label, IconData icon, int v, ValueChanged<int> set) =>
@@ -379,7 +658,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           labels: const ['لا', 'دوام ثابت', 'ورديات'],
           selected: _work,
           onChanged: (w) async {
-            setState(() => _work = w);
+            setState(() {
+              _work = w;
+              _workTouched = true;
+            });
             if (w == _Work.shifts) {
               final cfg = await editRuleConfig(
                 context,
@@ -457,9 +739,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ],
           ),
+        _commitmentsGroup(),
       ],
       next: 'التالي',
-      onNext: () => _go(3),
+      onNext: () => _go(4),
     );
   }
 
@@ -485,38 +768,44 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Widget _interestsStep() {
     final c = context.c;
-    final list = _interests.where((i) => !i.islam || _islam).toList();
+    final all = _interests
+        .where((i) => !i.islam || _islam)
+        .where((i) => !i.notFor.contains(_gender))
+        .toList();
+    bool suits(_Interest i) => i.tags.any(_roles.contains);
+    // المناسب للوضع أولًا، والباقي تحت «عرض الكل» (لو اختار وضعًا).
+    final mine = [...all.where(suits), ...all.where((i) => i.tags.isEmpty)];
+    final rest = all.where((i) => i.tags.isNotEmpty && !suits(i)).toList();
+    final list = _showAll || _roles.isEmpty ? [...mine, ...rest] : mine;
     return _page(
       title: 'وش تبغى يكون في يومك؟',
-      subtitle: 'اختر ما يهمّك، ونقترح له وقتًا في فراغك.',
+      subtitle: _roles.isEmpty
+          ? 'اختر ما يهمّك، ونقترح له وقتًا في فراغك.'
+          : 'رتّبناها على وضعك. اختر ما يهمّك.',
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 10,
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.2,
           children: [
             for (final i in list)
-              FilterChip(
-                avatar: Icon(
-                  i.icon,
-                  size: 18,
-                  color: _picked.contains(i.id) ? c.accent : c.ink2,
-                ),
-                label: Text(i.label),
-                selected: _picked.contains(i.id),
-                showCheckmark: false,
-                labelStyle: T.label.copyWith(
-                  fontSize: 13,
-                  color: _picked.contains(i.id) ? c.accent : c.ink,
-                ),
-                side: BorderSide(
-                  color: _picked.contains(i.id) ? c.accent : c.line,
-                ),
-                onSelected: (v) => setState(
-                  () => v ? _picked.add(i.id) : _picked.remove(i.id),
-                ),
+              _InterestTile(
+                interest: i,
+                on: _picked.contains(i.id),
+                onTap: () => _toggleInterest(i),
               ),
           ],
         ),
+        if (rest.isNotEmpty && _roles.isNotEmpty)
+          Center(
+            child: TextButton(
+              onPressed: () => setState(() => _showAll = !_showAll),
+              child: Text(_showAll ? 'اعرض المقترح فقط' : 'عرض الكل'),
+            ),
+          ),
       ],
       footer: Center(
         child: Text(
@@ -525,7 +814,164 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ),
       ),
       next: 'التالي',
-      onNext: () => _go(4),
+      onNext: () => _go(_wantsPeople ? 5 : 6),
+    );
+  }
+
+  Future<void> _toggleInterest(_Interest i) async {
+    if (_picked.contains(i.id)) {
+      setState(() => _picked.remove(i.id));
+      return;
+    }
+    // صحتي والحمل والطفل: نفتح إعدادها مباشرة.
+    if (i.id == 'health') {
+      final cfg = await editRuleConfig(
+        context,
+        _health ??
+            HealthConfig(
+              checks: [
+                HealthCheck(
+                  id: newId().substring(0, 8),
+                  kind: HealthCheckKind.glucose,
+                  title: HealthCheckKind.glucose.label,
+                  times: const [7 * 60, 21 * 60],
+                ),
+              ],
+            ),
+      );
+      if (cfg is HealthConfig && cfg.checks.isNotEmpty) {
+        setState(() {
+          _health = cfg;
+          _picked.add(i.id);
+        });
+      }
+      return;
+    }
+    if (i.id == 'mother') {
+      final cfg = await editRuleConfig(
+        context,
+        _mother ??
+            MotherConfig(
+              stage: _roles.contains('infant') && !_roles.contains('pregnant')
+                  ? MotherStage.infant
+                  : MotherStage.pregnant,
+            ),
+      );
+      if (cfg is MotherConfig) {
+        setState(() {
+          _mother = cfg;
+          _picked.add(i.id);
+        });
+      }
+      return;
+    }
+    setState(() => _picked.add(i.id));
+  }
+
+  Future<void> _pickPersonFromPhone() async {
+    try {
+      final picked = await FlutterNativeContactPicker().selectPhoneNumber();
+      if (picked == null || !mounted) return;
+      final phone =
+          picked.selectedPhoneNumber ??
+          ((picked.phoneNumbers?.isNotEmpty ?? false)
+              ? picked.phoneNumbers!.first
+              : null);
+      setState(() {
+        _personName.text = (picked.fullName ?? '').trim();
+        _personPhone = phone?.replaceAll(RegExp(r'[^0-9+ ]'), '').trim();
+      });
+    } catch (_) {
+      if (mounted) toast(context, 'ما قدرنا نفتح جهات الاتصال، اكتب الاسم');
+    }
+  }
+
+  void _addPerson() {
+    final name = _personName.text.trim();
+    if (name.isEmpty) return;
+    final (freq, method) = relationDefaults(_personRelation);
+    setState(() {
+      _people.add(
+        Person(
+          id: newId(),
+          name: name,
+          phone: _personPhone,
+          relation: _personRelation,
+          freq: freq,
+          method: method,
+          addedAt: Day.fromDateTime(DateTime.now()),
+        ),
+      );
+      _personName.clear();
+      _personPhone = null;
+    });
+  }
+
+  Widget _peopleStep() {
+    final c = context.c;
+    return _page(
+      title: 'مين تبغى تتواصل معه؟',
+      subtitle:
+          'أضف الأسماء مرة وحدة، والتطبيق يقترح اتصال أو رسالة أو زيارة حسب العلاقة، ويوزّعهم على أسابيعك.',
+      children: [
+        PillButton(
+          label: 'اختر من جهات الاتصال',
+          icon: Icons.contacts_outlined,
+          soft: true,
+          expand: true,
+          onPressed: _pickPersonFromPhone,
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _personName,
+          onSubmitted: (_) => _addPerson(),
+          decoration: const InputDecoration(
+            hintText: 'أو اكتب الاسم، مثل: أمي',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Segmented<Relation>(
+          values: Relation.values,
+          labels: [for (final r in Relation.values) r.label],
+          selected: _personRelation,
+          onChanged: (r) => setState(() => _personRelation = r),
+        ),
+        const SizedBox(height: 10),
+        PillButton(
+          label: 'أضف للقائمة',
+          icon: Icons.person_add_alt,
+          expand: true,
+          onPressed: _addPerson,
+        ),
+        if (_people.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final p in _people)
+                InputChip(
+                  label: Text('${p.name} · ${p.relation.label}'),
+                  onDeleted: () => setState(() => _people.remove(p)),
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 18),
+        Text(
+          'كم مرة في الأسبوع نقترح؟',
+          style: T.label.copyWith(color: c.muted),
+        ),
+        const SizedBox(height: 8),
+        Segmented<ContactLevel>(
+          values: const [ContactLevel.low, ContactLevel.mid, ContactLevel.high],
+          labels: const ['قليل · 1', 'متوسط · 3', 'كثير · 5'],
+          selected: _level,
+          onChanged: (v) => setState(() => _level = v),
+        ),
+      ],
+      next: _people.isEmpty ? 'أضيفهم بعدين' : 'التالي',
+      onNext: () => _go(6),
     );
   }
 
@@ -554,7 +1000,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 ((p.end - p.start) % minutesPerDay) -
                 (p.hasBreak ? p.breakEnd! - p.breakStart! : 0),
           );
-    final people = _picked.contains('people') || _picked.contains('family');
+    final people = _wantsPeople;
     return _page(
       title: 'جدولك جاهز',
       subtitle: 'هذا ملخص يومك المعتاد. كل شيء قابل للتعديل.',
@@ -566,6 +1012,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 icon: Icons.mosque_outlined,
                 title: '${nums(5)} صلوات',
                 subtitle: 'حسب أوقات ${_city?.name ?? ''}',
+              ),
+            for (final cm in _commitments)
+              SettingsRow(
+                icon: iconFor(cm.type.icon),
+                title: cm.title,
+                subtitle: ruleSummary(cm),
+              ),
+            if (_picked.contains('health') && _health != null)
+              SettingsRow(
+                icon: Icons.monitor_heart_outlined,
+                title: 'صحتي',
+                subtitle: ruleSummary(_health!),
+              ),
+            if (_picked.contains('mother') && _mother != null)
+              SettingsRow(
+                icon: Icons.child_care_outlined,
+                title: 'الحمل والطفل',
+                subtitle: ruleSummary(_mother!),
               ),
             if (work != null)
               SettingsRow(
@@ -584,8 +1048,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             if (people)
               SettingsRow(
                 icon: Icons.forum_outlined,
-                title: '${nums(3)} اقتراحات تواصل أسبوعيًا',
-                subtitle: 'تضيف الأسماء من الإعدادات › التواصل',
+                title: '${nums(_level.perWeek)} اقتراحات تواصل أسبوعيًا',
+                subtitle: _people.isEmpty
+                    ? 'تضيف الأسماء من الإعدادات › التواصل'
+                    : _people.map((p) => p.name).join('، '),
               ),
           ],
         ),
@@ -626,6 +1092,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       joinedAt: now,
       weekend: co.weekend,
       currency: co.currency,
+      ageGroup: _age,
+      gender: _gender,
+      roles: {..._roles},
     );
     final keys = _ruleKeys;
     final work = _workCfg;
@@ -635,8 +1104,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Rule(id: newId(), key: e.key, validFrom: today, config: e.build()),
       if (work != null)
         Rule(id: newId(), key: 'work', validFrom: today, config: work),
+      for (final cm in _commitments)
+        Rule(
+          id: newId(),
+          key: 'class:${newId().substring(0, 8)}',
+          validFrom: today,
+          config: cm,
+        ),
+      if (_picked.contains('health') && _health != null)
+        Rule(id: newId(), key: 'health', validFrom: today, config: _health!),
+      if (_picked.contains('mother') && _mother != null)
+        Rule(id: newId(), key: 'mother', validFrom: today, config: _mother!),
     ];
-    final people = _picked.contains('people') || _picked.contains('family');
+    final people = _wantsPeople;
+    final family = _picked.contains('family');
     await Future<void>.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
     if (_remind) {
@@ -651,12 +1132,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         .completeOnboarding(
           profile,
           rules,
-          contacts: ContactsConfig(enabled: people),
+          contacts: ContactsConfig(enabled: people, level: _level).withOuting(
+            defaultOutings
+                .firstWhere((o) => o.kind == OutingKind.family)
+                .copyWith(enabled: family),
+          ),
           settings: ref
               .read(appDataProvider)
               .settings
               .copyWith(eveningReview: true),
         );
+    final ctrl = ref.read(appDataProvider.notifier);
+    for (final p in _people) {
+      await ctrl.savePerson(p);
+    }
     if (mounted) context.go('/day');
   }
 }
@@ -734,6 +1223,150 @@ class _GeneratingState extends State<_Generating> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// مربع كبير مثل الإضافات: أيقونة، اسم، وصف قصير، وعلامة التفعيل في الزاوية.
+class _InterestTile extends StatelessWidget {
+  const _InterestTile({
+    required this.interest,
+    required this.on,
+    required this.onTap,
+  });
+  final _Interest interest;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Semantics(
+      button: true,
+      selected: on,
+      label: interest.label,
+      excludeSemantics: true,
+      child: Material(
+        color: on ? c.accentSoft : c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.lg),
+          side: BorderSide(color: on ? c.accent : c.line, width: on ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: on ? c.accent : c.sunk,
+                        borderRadius: BorderRadius.circular(R.md),
+                      ),
+                      child: Icon(
+                        interest.icon,
+                        size: 26,
+                        color: on ? c.onAccent : c.ink2,
+                      ),
+                    ),
+                    const Spacer(),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: on ? c.accent : Colors.transparent,
+                        border: Border.all(
+                          color: on ? c.accent : c.lineStrong,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: on
+                          ? Icon(Icons.check, size: 15, color: c.onAccent)
+                          : null,
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  interest.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.cardTitle.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  interest.desc,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.meta.copyWith(color: c.muted),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleTile extends StatelessWidget {
+  const _RoleTile({
+    required this.label,
+    required this.icon,
+    required this.on,
+    required this.onTap,
+  });
+  final String label;
+  final IconData icon;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Semantics(
+      button: true,
+      selected: on,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: on ? c.accentSoft : c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.md),
+          side: BorderSide(color: on ? c.accent : c.line, width: on ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(icon, size: 22, color: on ? c.accent : c.ink2),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.label.copyWith(fontSize: 14),
+                  ),
+                ),
+                if (on) Icon(Icons.check_circle, size: 18, color: c.accent),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

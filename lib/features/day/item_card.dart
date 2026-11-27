@@ -10,7 +10,11 @@ import '../../core/widgets.dart';
 import '../../services/contact_actions.dart';
 import '../../state/providers.dart';
 import '../goals/amount_sheet.dart';
+import 'breathe_sheet.dart';
+import 'health_sheet.dart';
 import 'item_sheet.dart';
+import 'message_sheet.dart';
+import 'move_sheet.dart';
 import 'water_sheet.dart';
 
 /// بطاقة المهمة من دليل التصميم: مربع أيقونة، عنوان بسطر، وصف بسطر، وإجراء واحد.
@@ -22,10 +26,14 @@ class ItemCard extends ConsumerWidget {
     required this.date,
     this.highlight = false,
     this.missedDot = false,
+    this.nested = const [],
   });
   final PlanItem item;
   final Day date;
   final bool highlight;
+
+  /// العناصر الفرعية التي تُعرض داخل هذه البطاقة الأب.
+  final List<PlanItem> nested;
 
   /// نقطة كهرمانية في سطر الوصف (داخل ورقة «فاتت» فقط).
   final bool missedDot;
@@ -75,10 +83,43 @@ class ItemCard extends ConsumerWidget {
       }
     }
 
+    // الطلعات: مقترحة ← مجدولة ← تمّت.
+    final outing = i.key.startsWith('outing:');
+    final stageKey = 'stage:${date.key}:${i.key}';
+    final outingCfg = outing
+        ? ref.watch(
+            appDataProvider.select(
+              (d) => d.contacts.outing(
+                OutingKind.values.byName(i.key.substring(7)),
+              ),
+            ),
+          )
+        : null;
+    final scheduled =
+        !outing ||
+        !outingCfg!.suggested ||
+        ref.watch(
+          appDataProvider.select((d) => d.meta[stageKey] == 'scheduled'),
+        );
+    final healthKind = healthKindOf(i);
+    final reading = healthKind == null
+        ? null
+        : readingText(
+            healthKind,
+            ref.watch(
+              appDataProvider.select((d) => d.logs[recordKey(date, i.key)]),
+            ),
+          );
     final meta = <String>[
+      if (outing && !done && !off) scheduled ? 'مجدولة' : 'مقترحة',
+      ?reading,
       fmtRange(i.start, i.end % minutesPerDay),
       if (off) statusLabel(i, isToday: isToday, now: now),
-      if (!off && i.subtitle != null && i.subtitle!.isNotEmpty && !_isDraft(i))
+      if (!off &&
+          reading == null &&
+          i.subtitle != null &&
+          i.subtitle!.isNotEmpty &&
+          !_isDraft(i))
         nums(i.subtitle),
       if (i.pagesFrom != null && i.kind == ItemKind.quran)
         'وردك ${nums(i.pagesTo! - i.pagesFrom! + 1)} صفحات',
@@ -96,7 +137,18 @@ class ItemCard extends ConsumerWidget {
         (done || !upcoming || !i.fixed);
     final contact =
         i.kind == ItemKind.contact && i.icon != 'gift' && i.icon != 'visit';
-    if (contact && !done && !isFuture && !off) {
+    if (outing && !scheduled && !done && !off) {
+      action = SmallButton(
+        label: 'ثبّتها',
+        primary: true,
+        onTap: () async {
+          await ctrl.setMeta(stageKey, 'scheduled');
+          if (context.mounted) {
+            toast(context, 'ثبّتنا ${i.title} ${fmtTime(i.start)}');
+          }
+        },
+      );
+    } else if (contact && !done && !isFuture && !off) {
       final person = ref
           .watch(appDataProvider.select((d) => d.people))
           .where((p) => p.id == i.personId)
@@ -106,6 +158,7 @@ class ItemCard extends ConsumerWidget {
         label: call ? 'اتصل' : 'أرسل',
         primary: true,
         onTap: () async {
+          if (!call) return showMessageSheet(context, ref, i, date);
           final ok =
               person != null &&
               await openContact(
@@ -125,6 +178,27 @@ class ItemCard extends ConsumerWidget {
             onAction: () => ctrl.markDone(date, i),
           );
         },
+      );
+    } else if (i.kind == ItemKind.contact &&
+        i.icon == 'gift' &&
+        i.personId != null &&
+        !done &&
+        !isFuture &&
+        !off) {
+      action = SmallButton(
+        label: 'هنّئ',
+        primary: true,
+        onTap: () => showMessageSheet(context, ref, i, date),
+      );
+    } else if (healthKind != null &&
+        healthKind.hasReading &&
+        !done &&
+        !isFuture &&
+        !off) {
+      action = SmallButton(
+        label: 'سجّل',
+        primary: true,
+        onTap: () => logReading(context, ref, i, date),
       );
     } else if (i.kind == ItemKind.savings && !done && !isFuture && !off) {
       action = SmallButton(
@@ -241,7 +315,8 @@ class ItemCard extends ConsumerWidget {
                                   Expanded(
                                     child: Text(
                                       meta,
-                                      maxLines: 1,
+                                      // فكرة الهدية تنكتب كاملة في سطرين.
+                                      maxLines: i.icon == 'gift' ? 3 : 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: T.meta.copyWith(color: c.muted),
                                     ),
@@ -266,6 +341,11 @@ class ItemCard extends ConsumerWidget {
                   _PagesRow(item: i, date: date),
                 if (i.subs.isNotEmpty)
                   _Subs(item: i, date: date, enabled: !isFuture),
+                if (nested.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(22, 0, 8, 8),
+                    child: ChildItems(items: nested, date: date),
+                  ),
               ],
             ),
           ),
@@ -358,6 +438,106 @@ class _DraftLine extends StatelessWidget {
             style: T.micro.copyWith(color: c.muted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// العناصر الفرعية تحت بطاقة أب: خط رأسي يربطها، وكل عنصر بوقته وتأكيده.
+class ChildItems extends StatelessWidget {
+  const ChildItems({super.key, required this.items, required this.date});
+  final List<PlanItem> items;
+  final Day date;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      padding: const EdgeInsetsDirectional.only(start: 12),
+      decoration: BoxDecoration(
+        border: BorderDirectional(
+          start: BorderSide(color: c.lineStrong, width: 2),
+        ),
+      ),
+      child: Column(
+        children: [for (final i in items) ChildItemRow(item: i, date: date)],
+      ),
+    );
+  }
+}
+
+class ChildItemRow extends ConsumerWidget {
+  const ChildItemRow({super.key, required this.item, required this.date});
+  final PlanItem item;
+  final Day date;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    final i = item;
+    final today = ref.watch(todayProvider);
+    final now = ref.watch(nowMinuteProvider);
+    final isFuture = date.isAfter(today);
+    final done = i.isDoneLike;
+    final isNow =
+        date == today &&
+        i.start <= now &&
+        now < i.end &&
+        i.status == ItemStatus.pending;
+    final ctrl = ref.read(appDataProvider.notifier);
+    final canCheck = !isFuture && i.track != TrackMode.auto;
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      decoration: BoxDecoration(
+        color: done ? Colors.transparent : c.sunk,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: isNow ? Border.all(color: c.accent, width: 1.5) : null,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.sm),
+        onTap: () => showItemSheet(context, ref, i, date),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 2, 0, 2),
+          child: Row(
+            children: [
+              Icon(iconFor(i.icon), size: 18, color: done ? c.muted : c.ink2),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      i.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.label.copyWith(
+                        fontSize: 13.5,
+                        color: done ? c.muted : c.ink,
+                        decoration: done ? TextDecoration.lineThrough : null,
+                        decorationColor: c.muted,
+                      ),
+                    ),
+                    Text(
+                      fmtRange(i.start, i.end % minutesPerDay),
+                      style: T.micro.copyWith(
+                        color: c.muted,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (canCheck)
+                CheckCircle(
+                  size: 24,
+                  checked: done,
+                  label: done ? 'ألغِ ${i.title}' : 'تمّت ${i.title}',
+                  onTap: () =>
+                      done ? ctrl.undo(date, i.key) : ctrl.markDone(date, i),
+                )
+              else
+                const SizedBox(height: 38),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -681,7 +861,12 @@ class ReminderLineTile extends ConsumerWidget {
     if (!date.isAfter(today)) {
       if (line.kind == LineKind.water) {
         onTap = () => showWaterSheet(context, ref, date);
+      } else if (line.kind == LineKind.stand && !line.done) {
+        onTap = () => showMoveDialog(context, ref, date, lineKey: line.key);
+      } else if (line.kind == LineKind.breathe && !line.done) {
+        onTap = () => showBreatheDialog(context, ref, date, lineKey: line.key);
       } else if (line.kind == LineKind.breathe ||
+          line.kind == LineKind.stand ||
           line.kind == LineKind.custom) {
         onTap = () => ref
             .read(appDataProvider.notifier)

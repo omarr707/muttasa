@@ -32,7 +32,18 @@ class UserProfile {
     this.weekend = const {DateTime.friday, DateTime.saturday},
     this.hijriOffset = 0,
     this.currency = 'ريال',
+    this.ageGroup,
+    this.gender,
+    this.roles = const {},
   });
+
+  /// اختياري: الفئة العمرية والجنس، لترتيب الاقتراحات فقط.
+  final String? ageGroup;
+  final String? gender;
+
+  /// «وضعك الحالي» (اختيار متعدد): work, university, school, kids,
+  /// freelance, pregnant, infant, retired.
+  final Set<String> roles;
 
   /// الاسم (توقيع الرسائل).
   final String name;
@@ -77,6 +88,9 @@ class UserProfile {
     Set<int>? weekend,
     int? hijriOffset,
     String? currency,
+    String? ageGroup,
+    String? gender,
+    Set<String>? roles,
   }) => UserProfile(
     name: name ?? this.name,
     country: country ?? this.country,
@@ -92,6 +106,9 @@ class UserProfile {
     weekend: weekend ?? this.weekend,
     hijriOffset: hijriOffset ?? this.hijriOffset,
     currency: currency ?? this.currency,
+    ageGroup: ageGroup ?? this.ageGroup,
+    gender: gender ?? this.gender,
+    roles: roles ?? this.roles,
   );
 
   Map<String, Object?> toJson() => {
@@ -109,6 +126,9 @@ class UserProfile {
     'weekend': (weekend.toList()..sort()),
     'hijriOffset': hijriOffset,
     'currency': currency,
+    'ageGroup': ageGroup,
+    'gender': gender,
+    'roles': (roles.toList()..sort()),
   };
 
   factory UserProfile.fromJson(Map<String, Object?> j) => UserProfile(
@@ -130,6 +150,9 @@ class UserProfile {
     },
     hijriOffset: (j['hijriOffset'] as int?) ?? 0,
     currency: (j['currency'] as String?) ?? 'ريال',
+    ageGroup: j['ageGroup'] as String?,
+    gender: j['gender'] as String?,
+    roles: {...((j['roles'] as List?) ?? const []).cast<String>()},
   );
 }
 
@@ -189,7 +212,7 @@ class AppSettings {
     this.dailyCap = 12,
     this.eveningReview = true,
     this.fontSize = FontSize.medium,
-    this.arabicDigits = true,
+    this.arabicDigits = false,
     this.theme = ThemePref.system,
     this.headerDate = HeaderDate.both,
     this.showLines = true,
@@ -296,7 +319,7 @@ class AppSettings {
     'dailyCap': dailyCap,
     'eveningReview': eveningReview,
     'fontSize': fontSize.name,
-    'arabicDigits': arabicDigits,
+    'digits': arabicDigits ? 'arabic' : 'latin',
     'theme': theme.name,
     'headerDate': headerDate.name,
     'showLines': showLines,
@@ -321,7 +344,8 @@ class AppSettings {
     dailyCap: (j['dailyCap'] as int?) ?? 12,
     eveningReview: (j['eveningReview'] as bool?) ?? true,
     fontSize: FontSize.values.byName((j['fontSize'] as String?) ?? 'medium'),
-    arabicDigits: (j['arabicDigits'] as bool?) ?? true,
+    // المفتاح القديم «arabicDigits» كان افتراضه الهندية؛ نتجاهله حتى يرجع الكل إلى 123.
+    arabicDigits: j['digits'] == 'arabic',
     theme: ThemePref.values.byName((j['theme'] as String?) ?? 'system'),
     headerDate: HeaderDate.values.byName(
       (j['headerDate'] as String?) ?? 'both',

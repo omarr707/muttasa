@@ -42,6 +42,8 @@ enum RuleKind {
   klass,
   reminders,
   savings,
+  health,
+  mother,
 }
 
 /// قاعدة مؤرّخة. «من اليوم فصاعدًا» يغلق الصف القديم ويفتح صفًا جديدًا
@@ -153,6 +155,10 @@ sealed class RuleConfig {
         return RemindersConfig.fromJson(j);
       case RuleKind.savings:
         return SavingsConfig.fromJson(j);
+      case RuleKind.health:
+        return HealthConfig.fromJson(j);
+      case RuleKind.mother:
+        return MotherConfig.fromJson(j);
     }
   }
 }
@@ -499,7 +505,32 @@ class KidConfig extends RuleConfig {
   );
 }
 
-/// حصة أو نادٍ أو دورة بموعد أسبوعي.
+/// نوع الالتزام في «التزاماتي».
+enum CommitmentType {
+  university('الجامعة', 'محاضرة', 'university'),
+  school('المدرسة', 'المدرسة', 'school'),
+  club('النادي', 'النادي', 'gym'),
+  course('دورة', 'دورة', 'course'),
+  other('التزام خاص', 'التزام', 'class');
+
+  const CommitmentType(this.label, this.defaultTitle, this.icon);
+  final String label;
+  final String defaultTitle;
+  final String icon;
+}
+
+/// فترة واحدة داخل يوم.
+class Slot {
+  const Slot(this.start, this.end);
+  final int start;
+  final int end;
+  Map<String, Object?> toJson() => {'start': start, 'end': end};
+  factory Slot.fromJson(Map<String, Object?> j) =>
+      Slot(j['start']! as int, j['end']! as int);
+}
+
+/// التزام أسبوعي: محاضرات، مدرسة، نادي، دورة، أو حصة.
+/// [slots] (اختياري) يعطي كل يوم فتراته، ولو أكثر من فترة في اليوم.
 class ClassConfig extends RuleConfig {
   const ClassConfig({
     required this.title,
@@ -508,6 +539,8 @@ class ClassConfig extends RuleConfig {
     required this.start,
     required this.end,
     this.place,
+    this.type = CommitmentType.other,
+    this.slots = const {},
   });
   final String title;
   final String who;
@@ -515,6 +548,14 @@ class ClassConfig extends RuleConfig {
   final int start;
   final int end;
   final String? place;
+  final CommitmentType type;
+  final Map<int, List<Slot>> slots;
+
+  /// فترات يوم [weekday]: من [slots] إن وُجدت، وإلا الوقت الموحّد.
+  List<Slot> slotsOn(int weekday) {
+    if (slots.isNotEmpty) return slots[weekday] ?? const [];
+    return weekdays.contains(weekday) ? [Slot(start, end)] : const [];
+  }
 
   @override
   RuleKind get kind => RuleKind.klass;
@@ -527,6 +568,12 @@ class ClassConfig extends RuleConfig {
     'start': start,
     'end': end,
     'place': place,
+    'type': type.name,
+    if (slots.isNotEmpty)
+      'slots': {
+        for (final e in slots.entries)
+          '${e.key}': [for (final s in e.value) s.toJson()],
+      },
   };
   factory ClassConfig.fromJson(Map<String, Object?> j) => ClassConfig(
     title: j['title']! as String,
@@ -535,6 +582,14 @@ class ClassConfig extends RuleConfig {
     start: j['start']! as int,
     end: j['end']! as int,
     place: j['place'] as String?,
+    type: CommitmentType.values.asNameMap()[j['type']] ?? CommitmentType.other,
+    slots: {
+      for (final e in ((j['slots'] as Map?) ?? const {}).entries)
+        int.parse(e.key as String): [
+          for (final s in e.value as List)
+            Slot.fromJson((s as Map).cast<String, Object?>()),
+        ],
+    },
   );
 }
 
@@ -543,29 +598,120 @@ class RemindersConfig extends RuleConfig {
   const RemindersConfig({
     this.water = true,
     this.cups = 8,
+    this.waterAlerts,
+    this.waterDays = allWeekdays,
     this.stand = true,
+    this.standEvery = 120,
+    this.standDays = allWeekdays,
     this.breathe = true,
+    this.breatheSlots = const {BreatheSlot.afternoon},
+    this.breatheMinutes = 1,
+    this.breatheDays = allWeekdays,
   });
+
+  /// الماء: أكواب شرب فقط (لا يدخل فيها ماء الأكل). [cups] هدف التسجيل،
+  /// و[waterAlerts] عدد التذكيرات (null = بعدد الأكواب).
   final bool water;
   final int cups;
+  final int? waterAlerts;
+  final Set<int> waterDays;
+
+  /// الحركة: تمرين قصير كل [standEvery] دقيقة من يقظتك، في الدوام والإجازة.
   final bool stand;
+  final int standEvery;
+  final Set<int> standDays;
+
+  /// التنفّس: جلسة أو أكثر يختارها المستخدم.
   final bool breathe;
+  final Set<BreatheSlot> breatheSlots;
+  final int breatheMinutes;
+  final Set<int> breatheDays;
+
+  int get alerts => (waterAlerts ?? cups).clamp(1, 16);
+
   @override
   RuleKind get kind => RuleKind.reminders;
+
+  RemindersConfig copyWith({
+    bool? water,
+    int? cups,
+    int? waterAlerts,
+    bool clearAlerts = false,
+    Set<int>? waterDays,
+    bool? stand,
+    int? standEvery,
+    Set<int>? standDays,
+    bool? breathe,
+    Set<BreatheSlot>? breatheSlots,
+    int? breatheMinutes,
+    Set<int>? breatheDays,
+  }) => RemindersConfig(
+    water: water ?? this.water,
+    cups: cups ?? this.cups,
+    waterAlerts: clearAlerts ? null : (waterAlerts ?? this.waterAlerts),
+    waterDays: waterDays ?? this.waterDays,
+    stand: stand ?? this.stand,
+    standEvery: standEvery ?? this.standEvery,
+    standDays: standDays ?? this.standDays,
+    breathe: breathe ?? this.breathe,
+    breatheSlots: breatheSlots ?? this.breatheSlots,
+    breatheMinutes: breatheMinutes ?? this.breatheMinutes,
+    breatheDays: breatheDays ?? this.breatheDays,
+  );
+
   @override
   Map<String, Object?> toJson() => {
     'kind': kind.name,
     'water': water,
     'cups': cups,
+    'waterAlerts': waterAlerts,
+    'waterDays': (waterDays.toList()..sort()),
     'stand': stand,
+    'standEvery': standEvery,
+    'standDays': (standDays.toList()..sort()),
     'breathe': breathe,
+    'breatheSlots': [for (final b in breatheSlots) b.name],
+    'breatheMinutes': breatheMinutes,
+    'breatheDays': (breatheDays.toList()..sort()),
   };
-  factory RemindersConfig.fromJson(Map<String, Object?> j) => RemindersConfig(
-    water: (j['water'] as bool?) ?? true,
-    cups: (j['cups'] as int?) ?? 8,
-    stand: (j['stand'] as bool?) ?? true,
-    breathe: (j['breathe'] as bool?) ?? true,
-  );
+  factory RemindersConfig.fromJson(Map<String, Object?> j) {
+    Set<int> days(String k) =>
+        j[k] == null ? allWeekdays : {for (final d in j[k] as List) d as int};
+    return RemindersConfig(
+      water: (j['water'] as bool?) ?? true,
+      cups: (j['cups'] as int?) ?? 8,
+      waterAlerts: j['waterAlerts'] as int?,
+      waterDays: days('waterDays'),
+      stand: (j['stand'] as bool?) ?? true,
+      standEvery: (j['standEvery'] as int?) ?? 120,
+      standDays: days('standDays'),
+      breathe: (j['breathe'] as bool?) ?? true,
+      breatheSlots: j['breatheSlots'] == null
+          ? const {BreatheSlot.afternoon}
+          : {
+              for (final n in j['breatheSlots'] as List)
+                BreatheSlot.values.byName(n as String),
+            },
+      breatheMinutes: (j['breatheMinutes'] as int?) ?? 1,
+      breatheDays: days('breatheDays'),
+    );
+  }
+}
+
+/// أيام الأسبوع كلها (DateTime.monday..sunday).
+const allWeekdays = {1, 2, 3, 4, 5, 6, 7};
+
+/// أوقات جلسات التنفّس.
+enum BreatheSlot {
+  morning('الصباح', 'breathe#am'),
+  afternoon('العصر', 'breathe'),
+  night('قبل النوم', 'breathe#pm');
+
+  const BreatheSlot(this.label, this.key);
+  final String label;
+
+  /// مفتاح السطر في السجل. العصر يحتفظ بالمفتاح القديم «breathe».
+  final String key;
 }
 
 /// الادخار: تذكير يوم الراتب بمبلغ شهري، وهدف اختياري. إدخال يدوي فقط.
@@ -626,5 +772,163 @@ class SavingsConfig extends RuleConfig {
     targetBy: j['targetBy'] == null
         ? null
         : Day.parse(j['targetBy']! as String),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// صحتي: تذكير وتسجيل فقط. الأوقات وعددها يحددها المستخدم حسب طبيبه،
+// والتطبيق ما يقترح جرعات ولا أرقامًا علاجية.
+// ---------------------------------------------------------------------------
+
+enum HealthCheckKind {
+  glucose('قياس السكر', 'glucose', 'ملغ/دل'),
+  pressure('قياس الضغط', 'pressure', 'ملم زئبق'),
+  medicine('الدواء', 'pill', null),
+  other('متابعة أخرى', 'health', null);
+
+  const HealthCheckKind(this.label, this.icon, this.unit);
+  final String label;
+  final String icon;
+
+  /// وحدة القراءة، أو null إذا ما فيه قراءة (الدواء: تمّ فقط).
+  final String? unit;
+  bool get hasReading => unit != null;
+}
+
+class HealthCheck {
+  const HealthCheck({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.times,
+    this.days = allWeekdays,
+  });
+  final String id;
+  final HealthCheckKind kind;
+  final String title;
+  final List<int> times;
+  final Set<int> days;
+
+  HealthCheck copyWith({
+    HealthCheckKind? kind,
+    String? title,
+    List<int>? times,
+    Set<int>? days,
+  }) => HealthCheck(
+    id: id,
+    kind: kind ?? this.kind,
+    title: title ?? this.title,
+    times: times ?? this.times,
+    days: days ?? this.days,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'kind': kind.name,
+    'title': title,
+    'times': times,
+    'days': (days.toList()..sort()),
+  };
+  factory HealthCheck.fromJson(Map<String, Object?> j) => HealthCheck(
+    id: j['id']! as String,
+    kind:
+        HealthCheckKind.values.asNameMap()[j['kind']] ?? HealthCheckKind.other,
+    title: j['title']! as String,
+    times: [...(j['times']! as List).cast<int>()],
+    days: j['days'] == null
+        ? allWeekdays
+        : {...(j['days']! as List).cast<int>()},
+  );
+}
+
+class HealthConfig extends RuleConfig {
+  const HealthConfig({this.checks = const []});
+  final List<HealthCheck> checks;
+  @override
+  RuleKind get kind => RuleKind.health;
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'checks': [for (final c in checks) c.toJson()],
+  };
+  factory HealthConfig.fromJson(Map<String, Object?> j) => HealthConfig(
+    checks: [
+      for (final c in (j['checks'] as List?) ?? const [])
+        HealthCheck.fromJson((c as Map).cast<String, Object?>()),
+    ],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// الحمل والطفل: مشي خفيف اختياري للحامل، وتذكير الرضعات وتسجيلها للرضيع.
+// المواعيد الطبية يضيفها المستخدم من «+». ما فيه جداول تطعيم الحين.
+// ---------------------------------------------------------------------------
+
+enum MotherStage {
+  pregnant('حامل'),
+  infant('أم لطفل رضيع');
+
+  const MotherStage(this.label);
+  final String label;
+}
+
+class MotherConfig extends RuleConfig {
+  const MotherConfig({
+    this.stage = MotherStage.pregnant,
+    this.walk = true,
+    this.walkMinutes = 20,
+    this.feeds = true,
+    this.feedEvery = 180,
+    this.babyBorn,
+  });
+  final MotherStage stage;
+
+  /// للحامل: مشي خفيف (بعد موافقة الطبيبة).
+  final bool walk;
+  final int walkMinutes;
+
+  /// للرضيع: تذكير الرضعات كل [feedEvery] دقيقة من صحيانك لنومك.
+  final bool feeds;
+  final int feedEvery;
+  final Day? babyBorn;
+
+  @override
+  RuleKind get kind => RuleKind.mother;
+
+  MotherConfig copyWith({
+    MotherStage? stage,
+    bool? walk,
+    int? walkMinutes,
+    bool? feeds,
+    int? feedEvery,
+    Day? babyBorn,
+  }) => MotherConfig(
+    stage: stage ?? this.stage,
+    walk: walk ?? this.walk,
+    walkMinutes: walkMinutes ?? this.walkMinutes,
+    feeds: feeds ?? this.feeds,
+    feedEvery: feedEvery ?? this.feedEvery,
+    babyBorn: babyBorn ?? this.babyBorn,
+  );
+
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'stage': stage.name,
+    'walk': walk,
+    'walkMinutes': walkMinutes,
+    'feeds': feeds,
+    'feedEvery': feedEvery,
+    'babyBorn': babyBorn?.key,
+  };
+  factory MotherConfig.fromJson(Map<String, Object?> j) => MotherConfig(
+    stage: MotherStage.values.asNameMap()[j['stage']] ?? MotherStage.pregnant,
+    walk: (j['walk'] as bool?) ?? true,
+    walkMinutes: (j['walkMinutes'] as int?) ?? 20,
+    feeds: (j['feeds'] as bool?) ?? true,
+    feedEvery: (j['feedEvery'] as int?) ?? 180,
+    babyBorn: j['babyBorn'] == null
+        ? null
+        : Day.parse(j['babyBorn']! as String),
   );
 }

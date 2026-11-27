@@ -34,7 +34,8 @@ enum OneOffKind {
   period('فترة'),
   event('حدث'),
   reminder('تذكير قصير'),
-  habitSession('جلسة لعادة');
+  habitSession('جلسة لعادة'),
+  contact('تواصل');
 
   const OneOffKind(this.label);
   final String label;
@@ -53,6 +54,8 @@ class OneOff {
     this.note,
     this.icon,
     this.preferred,
+    this.personId,
+    this.parent,
   });
 
   final String id;
@@ -75,6 +78,12 @@ class OneOff {
   /// وقت مفضل للمرن.
   final int? preferred;
 
+  /// للتواصل: الشخص المقصود.
+  final String? personId;
+
+  /// مفتاح البطاقة الأب في نفس اليوم (العنصر الفرعي يظهر داخلها في «يومي»).
+  final String? parent;
+
   String get itemKey => 'once:$id';
 
   Map<String, Object?> toJson() => {
@@ -89,6 +98,8 @@ class OneOff {
     'note': note,
     'icon': icon,
     'preferred': preferred,
+    'personId': personId,
+    'parent': parent,
   };
 
   factory OneOff.fromJson(Map<String, Object?> j) => OneOff(
@@ -103,6 +114,8 @@ class OneOff {
     note: j['note'] as String?,
     icon: j['icon'] as String?,
     preferred: j['preferred'] as int?,
+    personId: j['personId'] as String?,
+    parent: j['parent'] as String?,
   );
 }
 
