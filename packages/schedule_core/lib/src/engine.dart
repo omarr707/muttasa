@@ -1,5 +1,6 @@
 import 'contacts.dart';
 import 'day.dart';
+import 'format.dart';
 import 'prayer.dart';
 import 'plan.dart';
 import 'profile.dart';
@@ -72,6 +73,9 @@ class EngineInput {
 }
 
 const _step = 5;
+
+/// صفحات المصحف.
+const mushafPages = 604;
 
 /// ألقاب الصلوات ومددها في الجدول.
 const prayerTitles = {
@@ -484,6 +488,24 @@ class ScheduleEngine {
       queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
     }
     if (withWeekly) queue.addAll(_contactFlex(d, pr, dayWake, bed));
+    final savings = _ruleOfKind<SavingsConfig>(rules);
+    if (savings != null && savings.isPayDay(d)) {
+      queue.add(
+        _Flex(
+          key: 'savings',
+          ruleKey: 'savings',
+          kind: ItemKind.savings,
+          title: 'ادّخر من راتبك',
+          subtitle: 'يوم الراتب · المخطط ${savings.monthly} ${_p.currency}',
+          icon: 'coin',
+          duration: 5,
+          window: Window.night,
+          preferred: 20 * 60 + 30,
+          track: TrackMode.confirm,
+          category: 'money',
+        ),
+      );
+    }
 
     // المقفل أولًا (تعديل اليوم، ثم الوقت المخطط المسجّل)، ثم الباقي بالترتيب.
     for (final f in queue) {
@@ -716,7 +738,15 @@ class ScheduleEngine {
     };
     if (!due) return const [];
     final perDay = c.perDay.clamp(1, 3);
-    final pagesPerSession = c.pages == null ? null : (c.pages! / perDay).ceil();
+    final pages = c.isKhatma ? khatmaPagesOn(d, r) : c.pages;
+    if (c.isKhatma && pages == 0) return const []; // تمّت الختمة.
+    final pagesPerSession = pages == null ? null : (pages / perDay).ceil();
+    final duration = c.isKhatma
+        ? (((pagesPerSession! * 2.5) / 5).round() * 5).clamp(10, 120)
+        : c.duration;
+    final subtitle = c.isKhatma
+        ? 'ختمة قبل ${c.khatmaBy!.day} ${arabicMonths[c.khatmaBy!.month - 1]}'
+        : c.subtitle;
     return [
       for (var i = 0; i < perDay; i++)
         _Flex(
@@ -728,9 +758,9 @@ class ScheduleEngine {
             _ => ItemKind.habit,
           },
           title: c.title,
-          subtitle: c.subtitle,
+          subtitle: subtitle,
           icon: c.icon,
-          duration: c.duration,
+          duration: duration,
           window: c.windowFor(i),
           preferred: i == 0 ? c.preferred : null,
           track: c.track,
@@ -744,6 +774,38 @@ class ScheduleEngine {
           book: c.book,
         ),
     ];
+  }
+
+  /// آخر صفحة مسجّلة لقاعدة قبل يوم [d] (أو صفحة البداية - 1).
+  int lastPageBefore(Day d, Rule r) {
+    final c = r.config as FlexConfig;
+    var last = (c.startPage ?? 1) - 1;
+    for (final l in input.logs.values) {
+      if (l.itemKey != r.key && !l.itemKey.startsWith('${r.key}#')) continue;
+      if (!l.date.isBefore(d)) continue;
+      if (l.value2 != null && l.value2! > last) last = l.value2!;
+    }
+    return last;
+  }
+
+  /// ختمة: صفحات يوم [d] = المتبقي ÷ أيام القراءة الباقية حتى موعد الختم.
+  /// تتعدل تلقائيًا مع كل تسجيل، وتبقى ثابتة داخل اليوم نفسه.
+  int khatmaPagesOn(Day d, Rule r) {
+    final c = r.config as FlexConfig;
+    final rem = mushafPages - lastPageBefore(d, r);
+    if (rem <= 0) return 0;
+    final by = c.khatmaBy!;
+    var n = 0.0;
+    for (var x = d; !x.isAfter(by) && n < 1000; x = x.next) {
+      n += switch (c.recurrence) {
+        Daily() => 1,
+        Weekdays(:final days) => days.contains(x.weekday) ? 1 : 0,
+        TimesPerWeek(n: final k) => k / 7,
+        Once(:final date) => date == x ? 1 : 0,
+      };
+    }
+    if (n < 1) n = 1;
+    return (rem / n).ceil();
   }
 
   /// صفحة البداية: آخر صفحة مسجّلة + 1، أو صفحة البداية في القاعدة.
@@ -982,7 +1044,22 @@ class ScheduleEngine {
       ..sort(byStale);
     final others = input.people.where((p) => !p.pinned && due(p)).toList()
       ..sort(byStale);
-    final chosen = [...pinned, ...others.take(c.level.perWeek)];
+    final all = [...pinned, ...others.take(c.level.perWeek)];
+    // الزيارات في عطلة نهاية الأسبوع فقط (إذا الخيار مفعّل).
+    bool weekendVisit(Person p) =>
+        p.method == ContactMethod.visit && c.visitsWeekendOnly;
+    final visits = all.where(weekendVisit).toList();
+    final chosen = all.where((p) => !weekendVisit(p)).toList();
+    final weekendDays = [
+      for (var i = 0; i < 7; i++)
+        if (_p.weekend.contains(ws.add(i).weekday)) ws.add(i),
+    ];
+    for (var k = 0; k < visits.length; k++) {
+      final day = weekendDays.isEmpty
+          ? ws.add(6)
+          : weekendDays[k % weekendDays.length];
+      out.putIfAbsent(day, () => []).add(visits[k]);
+    }
     final n = chosen.length;
     for (var k = 0; k < n; k++) {
       // توزيع متساوٍ على الأيام السبعة، من منتصف كل حصة.
@@ -1001,6 +1078,27 @@ class ScheduleEngine {
       c.windowEnd.clamp(wake, bed.clamp(0, minutesPerDay)),
     );
     for (final p in contactWeek(d)[d] ?? const <Person>[]) {
+      if (p.method == ContactMethod.visit) {
+        final end = bed.clamp(0, minutesPerDay);
+        out.add(
+          _Flex(
+            key: p.itemKey,
+            kind: ItemKind.contact,
+            title: 'زُر ${p.name}',
+            subtitle: '${p.relation.label} · ${p.freq.label}',
+            icon: 'visit',
+            duration: 60,
+            window: Window.afternoon,
+            span: Span((16 * 60).clamp(wake, end), end),
+            preferred: c.windowStart.clamp(wake, end),
+            track: TrackMode.confirm,
+            category: 'contacts',
+            isExtra: true,
+            personId: p.id,
+          ),
+        );
+        continue;
+      }
       final call = (p.method == ContactMethod.call && c.calls) || !c.messages;
       out.add(
         _Flex(

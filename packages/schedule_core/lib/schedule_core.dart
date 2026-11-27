@@ -18,3 +18,5 @@ export 'src/progress.dart';
 export 'src/actions.dart';
 export 'src/notifications.dart';
 export 'src/diff.dart';
+export 'src/goals.dart';
+export 'src/report.dart';

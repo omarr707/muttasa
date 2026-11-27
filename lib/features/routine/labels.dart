@@ -26,6 +26,7 @@ String ruleTitle(RuleConfig c) => switch (c) {
   KidConfig(:final child) => 'توصيل واستلام $child',
   ClassConfig(:final title) => title,
   RemindersConfig() => 'تذكيرات قصيرة',
+  SavingsConfig() => 'الادخار',
 };
 
 String ruleIcon(RuleConfig c) => switch (c) {
@@ -36,6 +37,7 @@ String ruleIcon(RuleConfig c) => switch (c) {
   KidConfig() => 'kid',
   ClassConfig() => 'class',
   RemindersConfig() => 'water',
+  SavingsConfig() => 'coin',
 };
 
 String ruleSummary(RuleConfig c, {String city = ''}) =>
@@ -104,6 +106,12 @@ String _ruleSummary(RuleConfig c, {String city = ''}) {
         if (water) 'الماء $cups أكواب مع الوجبات والاستراحة',
         if (stand) 'الوقوف',
         if (breathe) 'التنفّس',
+      ].join(' · ');
+    case SavingsConfig(:final payDay, :final monthly, :final target):
+      return [
+        'يوم $payDay من كل شهر',
+        '${fmtThousands(monthly)} ريال',
+        if (target != null) 'الهدف ${fmtThousands(target)}',
       ].join(' · ');
   }
 }

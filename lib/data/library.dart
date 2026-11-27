@@ -195,4 +195,12 @@ final libraryEntries = <LibraryEntry>[
     group: 'light',
     build: () => const RemindersConfig(),
   ),
+  LibraryEntry(
+    key: 'savings',
+    title: 'الادخار',
+    description: 'تذكير يوم الراتب بمبلغ تحدده · إدخال يدوي فقط',
+    icon: 'coin',
+    group: 'money',
+    build: () => const SavingsConfig(),
+  ),
 ];

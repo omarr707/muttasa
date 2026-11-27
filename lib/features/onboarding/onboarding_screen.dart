@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/defaults.dart';
 import '../../data/library.dart';
+import '../../services/location.dart';
 import '../../services/notifications.dart';
 import '../../state/providers.dart';
 import '../routine/labels.dart';
@@ -252,6 +253,30 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
+  bool _locating = false;
+
+  Future<void> _useLocation() async {
+    setState(() => _locating = true);
+    try {
+      final found = await locateMe(ref.read(defaultsProvider));
+      if (!mounted) return;
+      setState(() {
+        _country = found.country;
+        _city = found.city;
+        _search.clear();
+      });
+    } catch (e) {
+      if (mounted) {
+        toast(
+          context,
+          e is LocationException ? e.message : 'ما قدرنا نحدد موقعك الحين',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
   Widget _cityStep() {
     final c = context.c;
     final defaults = ref.watch(defaultsProvider);
@@ -269,6 +294,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       title: 'في أي مدينة تعيش؟',
       subtitle: 'نحسب مواقيت الصلاة والإجازات والمناسبات الوطنية.',
       children: [
+        PillButton(
+          label: _locating ? 'نحدد موقعك…' : 'استخدم موقعي',
+          icon: Icons.my_location,
+          soft: true,
+          expand: true,
+          onPressed: _locating ? null : _useLocation,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'مرة واحدة لاختيار المدينة، ولا نتتبّع موقعك.',
+          textAlign: TextAlign.center,
+          style: T.meta.copyWith(color: c.muted),
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _search,
           onChanged: (_) => setState(() {}),
@@ -280,6 +319,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         const SizedBox(height: 12),
         SettingsGroup(
           children: [
+            if (_city != null && !all.any((e) => e.$2 == _city))
+              SettingsRow(
+                icon: Icons.my_location,
+                title: _city!.name,
+                subtitle: '${_country?.name ?? ''} · من موقعك',
+                trailing: Icon(Icons.check, size: 20, color: c.accent),
+              ),
             for (final (co, ci) in list.take(30))
               SettingsRow(
                 title: ci.name,

@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- «استخدم موقعي»: مرة واحدة لاختيار المدينة، بدقة تقريبية ولا نتتبّع. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="مُتَّسَع"
         android:name="${applicationName}"

@@ -274,6 +274,58 @@ class AppController extends Notifier<AppData> {
   }
 
   // --------------------------------------------------------------------------
+  // الأهداف والادخار
+  // --------------------------------------------------------------------------
+
+  Future<void> saveGoal(Goal g) async {
+    final list = [...state.goals];
+    final i = list.indexWhere((e) => e.id == g.id);
+    if (i >= 0) {
+      list[i] = g;
+    } else {
+      list.add(g);
+    }
+    await _repo.saveGoals(list);
+    state = state.copyWith(goals: list);
+  }
+
+  Future<void> deleteGoal(String id) async {
+    final list = state.goals.where((g) => g.id != id).toList();
+    await _repo.saveGoals(list);
+    state = state.copyWith(goals: list);
+  }
+
+  /// «+١» على هدف يدوي (كتاب خلص، حديث حفظته). التراجع بـ -١.
+  Future<void> addGoalEntry(String id, int delta) async {
+    final g = state.goals.where((g) => g.id == id).firstOrNull;
+    if (g == null) return;
+    final entries = [...g.entries];
+    if (delta > 0) {
+      entries.add(GoalEntry(_today, delta));
+    } else if (entries.isNotEmpty) {
+      entries.removeLast();
+    }
+    await saveGoal(g.copyWith(entries: entries));
+  }
+
+  /// مبلغ ادخار يدوي خارج يوم الراتب. يُحفظ سجلًا بمفتاح فريد.
+  Future<String> logSaving(int amount, {Day? date}) async {
+    final key = 'savings:manual:${newId().substring(0, 8)}';
+    await _putLog(
+      ItemLog(
+        date: date ?? _today,
+        itemKey: key,
+        status: ItemStatus.done,
+        doneAt: _nowMin,
+        value: amount,
+        category: 'money',
+        title: 'ادخار',
+      ),
+    );
+    return key;
+  }
+
+  // --------------------------------------------------------------------------
   // التواصل مع الناس
   // --------------------------------------------------------------------------
 

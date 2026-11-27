@@ -26,7 +26,8 @@ enum ContactFreq {
 enum ContactMethod {
   call('اتصال'),
   whatsapp('واتساب'),
-  sms('رسالة');
+  sms('رسالة'),
+  visit('زيارة');
 
   const ContactMethod(this.label);
   final String label;

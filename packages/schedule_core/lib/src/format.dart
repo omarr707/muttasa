@@ -19,6 +19,8 @@ String nums(Object? v) {
       b.write(_arabicIndic[c - 48]);
     } else if (c == 46 && digit(i - 1) && digit(i + 1)) {
       b.write('٫'); // فاصلة عشرية بين رقمين فقط.
+    } else if (c == 44 && digit(i - 1) && digit(i + 1)) {
+      b.write('٬'); // فاصل الآلاف.
     } else {
       b.writeCharCode(c);
     }

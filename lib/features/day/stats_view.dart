@@ -5,6 +5,7 @@ import 'package:schedule_core/schedule_core.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../state/providers.dart';
+import 'report_view.dart';
 
 const categoryLabels = {
   'prayer': 'الصلاة والأذكار',
@@ -16,9 +17,52 @@ const categoryLabels = {
   'tasks': 'المهام',
 };
 
-/// الإحصائيات: الأسبوع. تقرير الالتزام الشهري والسنوي في المرحلة الثانية.
-class StatsView extends ConsumerWidget {
+enum _Range { week, month, year }
+
+/// الإحصائيات: الأسبوع، و«تقرير الالتزام» الشهري والسنوي.
+class StatsView extends StatefulWidget {
   const StatsView({super.key, required this.date});
+  final Day date;
+  @override
+  State<StatsView> createState() => _StatsViewState();
+}
+
+class _StatsViewState extends State<StatsView> {
+  var _range = _Range.week;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Segmented<_Range>(
+          values: _Range.values,
+          labels: const ['الأسبوع', 'شهري', 'سنوي'],
+          selected: _range,
+          onChanged: (r) => setState(() => _range = r),
+          small: true,
+        ),
+      ),
+      switch (_range) {
+        _Range.week => _WeekStats(date: widget.date),
+        _Range.month => CommitmentReport(
+          key: const ValueKey('m'),
+          yearly: false,
+          anchor: widget.date,
+        ),
+        _Range.year => CommitmentReport(
+          key: const ValueKey('y'),
+          yearly: true,
+          anchor: widget.date,
+        ),
+      },
+    ],
+  );
+}
+
+class _WeekStats extends ConsumerWidget {
+  const _WeekStats({required this.date});
   final Day date;
 
   @override
@@ -167,21 +211,6 @@ class StatsView extends ConsumerWidget {
                 ],
               ),
             ),
-          const SizedBox(height: 16),
-          MCard(
-            child: Row(
-              children: [
-                Icon(Icons.insights_outlined, color: c.muted),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'تقرير الالتزام الشهري والسنوي يجي مع المرحلة الثانية.',
-                    style: TextStyle(color: c.ink2, fontSize: 12.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

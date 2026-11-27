@@ -21,6 +21,7 @@ Future<RuleConfig?> editRuleConfig(
     PrayersConfig() => _PrayersEditor(initial: initial),
     AdhkarConfig() => _AdhkarEditor(initial: initial),
     RemindersConfig() => _RemindersEditor(initial: initial),
+    SavingsConfig() => _SavingsEditor(initial: initial),
   };
   return Navigator.of(context).push<RuleConfig>(
     MaterialPageRoute(builder: (_) => page, fullscreenDialog: true),
@@ -496,6 +497,7 @@ class _FlexEditorState extends State<_FlexEditor> {
   late int? _pages = widget.initial.pages;
   late int _startPage = widget.initial.startPage ?? 1;
   late String _icon = widget.initial.icon;
+  late Day? _khatmaBy = widget.initial.khatmaBy;
 
   @override
   void dispose() {
@@ -542,6 +544,7 @@ class _FlexEditorState extends State<_FlexEditor> {
               ? null
               : (_book.text.trim().isEmpty ? null : _book.text.trim()),
           startPage: _pages == null ? null : _startPage,
+          khatmaBy: isQuran && _pages != null ? _khatmaBy : null,
         ),
       ),
       children: [
@@ -671,7 +674,50 @@ class _FlexEditorState extends State<_FlexEditor> {
             onChanged: (v) =>
                 setState(() => _pages = v ? (isQuran ? 4 : 20) : null),
           ),
-          if (_pages != null) ...[
+          if (_pages != null && isQuran) ...[
+            const FieldLabel('النوع'),
+            ChoiceChips<bool>(
+              values: const [false, true],
+              label: (k) => k ? 'ختمة بموعد' : 'ورد ثابت',
+              selected: (k) => k == (_khatmaBy != null),
+              onSelected: (k) => setState(
+                () => _khatmaBy = k
+                    ? (_khatmaBy ?? Day.fromDateTime(DateTime.now()).add(60))
+                    : null,
+              ),
+            ),
+            if (_khatmaBy != null) ...[
+              const FieldLabel('أختم قبل'),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: SmallButton(
+                  icon: Icons.event_outlined,
+                  label: fmtDayLong(_khatmaBy!),
+                  onTap: () async {
+                    final today = Day.fromDateTime(DateTime.now());
+                    final d = await showDatePicker(
+                      context: context,
+                      firstDate: today.next.at(0),
+                      lastDate: today.add(800).at(0),
+                      initialDate: _khatmaBy!.at(0),
+                      helpText: 'موعد الختمة',
+                    );
+                    if (d != null) {
+                      setState(() => _khatmaBy = Day.fromDateTime(d));
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                nums(
+                  'نقسم المتبقي من ${604 - _startPage + 1} صفحة على أيام القراءة، ونعيد الحساب كل ما سجّلت.',
+                ),
+                style: TextStyle(color: c.muted, fontSize: 12),
+              ),
+            ],
+          ],
+          if (_pages != null && _khatmaBy == null) ...[
             const FieldLabel('صفحات اليوم'),
             ChoiceChips<int>(
               values: isQuran
@@ -956,4 +1002,96 @@ class _RemindersEditorState extends State<_RemindersEditor> {
       ),
     ],
   );
+}
+
+class _SavingsEditor extends StatefulWidget {
+  const _SavingsEditor({required this.initial});
+  final SavingsConfig initial;
+  @override
+  State<_SavingsEditor> createState() => _SavingsEditorState();
+}
+
+class _SavingsEditorState extends State<_SavingsEditor> {
+  late int _payDay = widget.initial.payDay;
+  late int _monthly = widget.initial.monthly;
+  late int? _target = widget.initial.target;
+  late Day? _by = widget.initial.targetBy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return _EditorScaffold(
+      title: 'الادخار',
+      onSave: () => Navigator.pop(
+        context,
+        SavingsConfig(
+          payDay: _payDay,
+          monthly: _monthly,
+          target: _target,
+          targetBy: _target == null ? null : _by,
+        ),
+      ),
+      children: [
+        Text(
+          'نذكّرك يوم الراتب تحط المبلغ على جنب، وتسجّل كم ادّخرت بنفسك. ما نربط حسابك البنكي ولا نعطي نصائح استثمار.',
+          style: TextStyle(color: c.ink2),
+        ),
+        const FieldLabel('يوم الراتب من الشهر'),
+        ChoiceChips<int>(
+          values: const [1, 10, 15, 25, 26, 27, 28, 31],
+          label: (d) => d == 31 ? nums('آخر يوم') : nums('$d'),
+          selected: (d) => d == _payDay,
+          onSelected: (d) => setState(() => _payDay = d),
+        ),
+        const FieldLabel('المبلغ الشهري'),
+        ChoiceChips<int>(
+          values: const [200, 300, 500, 1000, 2000, 3000],
+          label: (v) => nums(fmtThousands(v)),
+          selected: (v) => v == _monthly,
+          onSelected: (v) => setState(() => _monthly = v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('هدف ادخار'),
+          subtitle: const Text('يظهر في «أهدافي» مع حالته'),
+          value: _target != null,
+          onChanged: (v) => setState(() => _target = v ? 10000 : null),
+        ),
+        if (_target != null) ...[
+          ChoiceChips<int>(
+            values: const [5000, 10000, 20000, 50000],
+            label: (v) => nums(fmtThousands(v)),
+            selected: (v) => v == _target,
+            onSelected: (v) => setState(() => _target = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('بموعد'),
+            value: _by != null,
+            onChanged: (v) => setState(
+              () => _by = v ? Day.fromDateTime(DateTime.now()).add(365) : null,
+            ),
+          ),
+          if (_by != null)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: SmallButton(
+                icon: Icons.event_outlined,
+                label: fmtDayLong(_by!),
+                onTap: () async {
+                  final now = DateTime.now();
+                  final d = await showDatePicker(
+                    context: context,
+                    firstDate: now,
+                    lastDate: DateTime(now.year + 10),
+                    initialDate: _by!.at(0),
+                  );
+                  if (d != null) setState(() => _by = Day.fromDateTime(d));
+                },
+              ),
+            ),
+        ],
+      ],
+    );
+  }
 }
