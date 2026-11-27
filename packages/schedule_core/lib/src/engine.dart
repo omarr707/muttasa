@@ -694,24 +694,31 @@ class ScheduleEngine {
     for (final o in todaysOneOffs.where(
       (o) => o.start == null && o.kind != OneOffKind.reminder,
     )) {
+      final contact = o.kind == OneOffKind.contact;
       queue.add(
         _Flex(
           key: o.itemKey,
           kind: o.kind == OneOffKind.habitSession
               ? ItemKind.habit
-              : ItemKind.task,
+              : (contact ? ItemKind.contact : ItemKind.task),
           ruleKey: o.habitKey,
           title: o.title,
           subtitle: o.note,
           icon:
-              o.icon ?? (o.kind == OneOffKind.habitSession ? 'star' : 'check'),
+              o.icon ??
+              (o.kind == OneOffKind.habitSession
+                  ? 'star'
+                  : (contact ? 'call' : 'check')),
           duration: o.duration,
           window: o.window,
           preferred: o.preferred,
           track: TrackMode.confirm,
-          category: o.kind == OneOffKind.habitSession ? 'habits' : 'tasks',
+          category: o.kind == OneOffKind.habitSession
+              ? 'habits'
+              : (contact ? 'contacts' : 'tasks'),
           isExtra: o.kind == OneOffKind.habitSession,
           oneOffId: o.id,
+          personId: o.personId,
         ),
       );
     }
@@ -1018,10 +1025,13 @@ class ScheduleEngine {
       OneOffKind.period => ItemKind.period,
       OneOffKind.event => ItemKind.event,
       OneOffKind.habitSession => ItemKind.habit,
+      OneOffKind.contact => ItemKind.contact,
       _ => ItemKind.task,
     };
     final counted =
-        o.kind == OneOffKind.task || o.kind == OneOffKind.habitSession;
+        o.kind == OneOffKind.task ||
+        o.kind == OneOffKind.habitSession ||
+        o.kind == OneOffKind.contact;
     return PlanItem(
       key: o.itemKey,
       ruleKey: o.habitKey,
@@ -1033,6 +1043,7 @@ class ScheduleEngine {
           switch (kind) {
             ItemKind.event => 'event',
             ItemKind.period => 'period',
+            ItemKind.contact => 'call',
             _ => 'check',
           },
       start: start,
@@ -1040,9 +1051,14 @@ class ScheduleEngine {
       fixed: true,
       counted: counted,
       track: counted ? TrackMode.confirm : TrackMode.auto,
-      category: o.kind == OneOffKind.habitSession ? 'habits' : 'tasks',
+      category: switch (o.kind) {
+        OneOffKind.habitSession => 'habits',
+        OneOffKind.contact => 'contacts',
+        _ => 'tasks',
+      },
       isExtra: o.kind == OneOffKind.habitSession,
       oneOffId: o.id,
+      personId: o.personId,
     );
   }
 

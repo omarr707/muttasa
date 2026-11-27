@@ -139,6 +139,8 @@ void main() {
     await tester.tap(find.text('التالي'));
     await tester.pumpAndSettle();
     expect(find.text('وش تبغى يكون في يومك؟'), findsOneWidget);
+    await tester.ensureVisible(find.text('الرياضة'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('الرياضة'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('التالي'));

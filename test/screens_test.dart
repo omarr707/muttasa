@@ -347,6 +347,52 @@ void main() {
     );
   });
 
+  testWidgets('تنفّس: نافذة الزهرة', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('تنفّس'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/breathe_ready.png'),
+    );
+    await tester.tap(find.text('ابدأ'));
+    for (var k = 0; k < 38; k++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/breathe_inhale.png'),
+    );
+    await tester.tap(find.text('أنهِ الآن'));
+    await tester.pumpAndSettle();
+    expect(find.text('أحسنت'), findsOneWidget);
+  });
+
+  testWidgets('إضافة تواصل لشخص', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byTooltip('إضافة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تواصل'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('أمي'));
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/add_contact.png'),
+    );
+    await tester.ensureVisible(find.text('أضف').last);
+    await tester.tap(find.text('أضف').last);
+    await tester.pumpAndSettle();
+    final ctx = tester.element(find.byType(CustomScrollView));
+    final container = ProviderScope.containerOf(ctx);
+    final today = container.read(todayProvider);
+    final plan = container.read(dayPlanProvider(today));
+    expect(
+      plan.items.where((i) => i.kind == ItemKind.contact && i.oneOffId != null),
+      isNotEmpty,
+    );
+  });
+
   testWidgets('يومي داكن', (tester) async {
     await pumpApp(tester, brightness: Brightness.dark);
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
@@ -532,7 +578,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('رمضان · اليوم ٢'), findsOneWidget);
+    expect(find.text('رمضان · اليوم 2'), findsOneWidget);
     await shot(tester, 'ramadan_day');
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
     await tester.pumpAndSettle();
@@ -578,7 +624,7 @@ void main() {
         ],
       ),
     );
-    expect(find.text('إجازة حتى ٣٠ نوفمبر'), findsOneWidget);
+    expect(find.text('إجازة حتى 30 نوفمبر'), findsOneWidget);
     await shot(tester, 'vacation_day');
   });
 

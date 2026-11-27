@@ -21,10 +21,12 @@ class _Interest {
     this.id,
     this.label,
     this.icon,
-    this.rules, {
+    this.rules,
+    this.desc, {
     this.islam = false,
   });
   final String id;
+  final String desc;
   final String label;
   final IconData icon;
   final List<String> rules;
@@ -32,21 +34,50 @@ class _Interest {
 }
 
 const _interests = [
-  _Interest('prayer', 'الصلاة في وقتها', Icons.mosque_outlined, [
-    'prayers',
-    'adhkar',
-  ], islam: true),
-  _Interest('quran', 'القرآن', Icons.auto_stories_outlined, [
-    'quran:wird',
-  ], islam: true),
-  _Interest('sport', 'الرياضة', Icons.directions_walk, ['habit:walk']),
-  _Interest('read', 'القراءة', Icons.menu_book_outlined, ['habit:read']),
-  _Interest('lang', 'تعلّم لغة', Icons.translate, ['habit:language']),
-  _Interest('water', 'شرب الماء', Icons.water_drop_outlined, ['reminders']),
-  _Interest('family', 'وقت مع الأهل', Icons.family_restroom, []),
-  _Interest('people', 'التواصل مع الناس', Icons.forum_outlined, []),
-  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, []),
-  _Interest('save', 'الادخار', Icons.savings_outlined, []),
+  _Interest(
+    'prayer',
+    'الصلاة في وقتها',
+    Icons.mosque_outlined,
+    ['prayers', 'adhkar'],
+    'المواقيت والأذكار',
+    islam: true,
+  ),
+  _Interest(
+    'quran',
+    'القرآن',
+    Icons.auto_stories_outlined,
+    ['quran:wird'],
+    'ورد يومي أو ختمة',
+    islam: true,
+  ),
+  _Interest('sport', 'الرياضة', Icons.directions_walk, [
+    'habit:walk',
+  ], 'مشي أو تمرين'),
+  _Interest('read', 'القراءة', Icons.menu_book_outlined, [
+    'habit:read',
+  ], 'صفحات كل يوم'),
+  _Interest('lang', 'تعلّم لغة', Icons.translate, [
+    'habit:language',
+  ], 'جلسات قصيرة'),
+  _Interest('water', 'شرب الماء', Icons.water_drop_outlined, [
+    'reminders',
+  ], 'تذكير خفيف'),
+  _Interest(
+    'family',
+    'وقت مع الأهل',
+    Icons.family_restroom,
+    [],
+    'طلعات وزيارات',
+  ),
+  _Interest(
+    'people',
+    'التواصل مع الناس',
+    Icons.forum_outlined,
+    [],
+    'اتصال ورسالة',
+  ),
+  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, [], 'وقت ثابت للنوم'),
+  _Interest('save', 'الادخار', Icons.savings_outlined, [], 'يوم الراتب'),
 ];
 
 enum _Work { none, fixed, shifts }
@@ -490,29 +521,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       title: 'وش تبغى يكون في يومك؟',
       subtitle: 'اختر ما يهمّك، ونقترح له وقتًا في فراغك.',
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 10,
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.2,
           children: [
             for (final i in list)
-              FilterChip(
-                avatar: Icon(
-                  i.icon,
-                  size: 18,
-                  color: _picked.contains(i.id) ? c.accent : c.ink2,
-                ),
-                label: Text(i.label),
-                selected: _picked.contains(i.id),
-                showCheckmark: false,
-                labelStyle: T.label.copyWith(
-                  fontSize: 13,
-                  color: _picked.contains(i.id) ? c.accent : c.ink,
-                ),
-                side: BorderSide(
-                  color: _picked.contains(i.id) ? c.accent : c.line,
-                ),
-                onSelected: (v) => setState(
-                  () => v ? _picked.add(i.id) : _picked.remove(i.id),
+              _InterestTile(
+                interest: i,
+                on: _picked.contains(i.id),
+                onTap: () => setState(
+                  () => _picked.contains(i.id)
+                      ? _picked.remove(i.id)
+                      : _picked.add(i.id),
                 ),
               ),
           ],
@@ -734,6 +758,97 @@ class _GeneratingState extends State<_Generating> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// مربع كبير مثل الإضافات: أيقونة، اسم، وصف قصير، وعلامة التفعيل في الزاوية.
+class _InterestTile extends StatelessWidget {
+  const _InterestTile({
+    required this.interest,
+    required this.on,
+    required this.onTap,
+  });
+  final _Interest interest;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Semantics(
+      button: true,
+      selected: on,
+      label: interest.label,
+      excludeSemantics: true,
+      child: Material(
+        color: on ? c.accentSoft : c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.lg),
+          side: BorderSide(color: on ? c.accent : c.line, width: on ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: on ? c.accent : c.sunk,
+                        borderRadius: BorderRadius.circular(R.md),
+                      ),
+                      child: Icon(
+                        interest.icon,
+                        size: 26,
+                        color: on ? c.onAccent : c.ink2,
+                      ),
+                    ),
+                    const Spacer(),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: on ? c.accent : Colors.transparent,
+                        border: Border.all(
+                          color: on ? c.accent : c.lineStrong,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: on
+                          ? Icon(Icons.check, size: 15, color: c.onAccent)
+                          : null,
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  interest.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.cardTitle.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  interest.desc,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: T.meta.copyWith(color: c.muted),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

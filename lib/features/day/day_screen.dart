@@ -6,7 +6,10 @@ import '../../core/hijri.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../state/providers.dart';
+import '../settings/contacts_screens.dart' show PersonEditPage;
+import '../settings/settings_screen.dart' show pushPage;
 import 'add_sheet.dart';
+import 'breathe_sheet.dart';
 import 'friday_sheet.dart';
 import 'season_card.dart';
 import 'item_card.dart';
@@ -57,13 +60,28 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     final isToday = date == today;
     final missed = isToday ? missedToday(plan, now) : const <PlanItem>[];
 
-    final greg = fmtDayLong(date);
-    final hijri = hijriLabel(date, offset: profile.hijriOffset, short: true);
+    // الرأس: اسم اليوم بخط كبير، وبجانبه «اليوم/بكرة/أمس»، وتحته التاريخ.
+    final greg = nums(
+      '${date.day} ${arabicMonths[date.month - 1]} ${date.year}',
+    );
+    final hijri = nums(hijriLabel(date, offset: profile.hijriOffset));
     final dateLine = switch (settings.headerDate) {
       HeaderDate.gregorian => greg,
-      HeaderDate.hijri => '${arabicWeekdays[date.weekday]} · ${nums(hijri)}',
-      HeaderDate.both => '$greg · ${nums(hijri)}',
+      HeaderDate.hijri => hijri,
+      HeaderDate.both =>
+        '$greg · ${nums(hijriLabel(date, offset: profile.hijriOffset, short: true))}',
     };
+    final relative = switch (date.difference(today)) {
+      0 => 'اليوم',
+      1 => 'بكرة',
+      -1 => 'أمس',
+      _ => null,
+    };
+    final contacts = ref.watch(appDataProvider.select((d) => d.contacts));
+    final noPeople = ref.watch(appDataProvider.select((d) => d.people.isEmpty));
+    final inviteHidden = ref.watch(
+      appDataProvider.select((d) => d.meta['contacts.invite'] == 'hidden'),
+    );
 
     return Scaffold(
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -88,7 +106,53 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('مُتَّسَع', style: T.brand),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  arabicWeekdays[date.weekday]!,
+                                  maxLines: 1,
+                                  style: T.brand,
+                                ),
+                              ),
+                              if (relative != null) ...[
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: relative == 'اليوم'
+                                      ? null
+                                      : () => ref
+                                            .read(selectedDayProvider.notifier)
+                                            .set(today),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: c.accentSoft,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      relative,
+                                      style: T.micro.copyWith(color: c.accent),
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    textStyle: T.micro,
+                                  ),
+                                  onPressed: () => ref
+                                      .read(selectedDayProvider.notifier)
+                                      .set(today),
+                                  child: const Text('ارجع لليوم'),
+                                ),
+                              ],
+                            ],
+                          ),
                           Text(
                             dateLine,
                             maxLines: 1,
@@ -169,6 +233,11 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                         ),
                       ],
                       _Banners(date: date, plan: plan, today: today),
+                      if (isToday &&
+                          contacts.enabled &&
+                          noPeople &&
+                          !inviteHidden)
+                        const _ContactsInvite(),
                     ],
                   ),
                 ),
@@ -218,9 +287,27 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     final missedKeys = isToday
         ? missedToday(plan, now).map((i) => i.key).toSet()
         : const <String>{};
+    // العناصر الفرعية: أعمال الجمعة داخل بطاقتها، وما أضافه المستخدم «تحت بطاقة»
+    // يظهر داخل البطاقة الأب نفسها.
+    final oneOffs = ref.watch(appDataProvider.select((d) => d.oneOffs));
+    final parentOf = <String, String>{
+      for (final o in oneOffs)
+        if (o.parent != null && o.date == date) o.itemKey: o.parent!,
+    };
+    final children = <String, List<PlanItem>>{};
+    for (final i in plan.items) {
+      final p = parentOf[i.key];
+      if (p != null && plan.byKey(p) != null) {
+        (children[p] ??= []).add(i);
+      }
+    }
+    final nestedKeys = {
+      for (final l in children.values) ...l.map((i) => i.key),
+    };
     final items = plan.items
         .where((i) => _filter == _Filter.all || i.isDoneLike)
         .where((i) => !missedKeys.contains(i.key))
+        .where((i) => !nestedKeys.contains(i.key) && !isFridayChild(i.key))
         .toList();
     final lines = _filter == _Filter.all && settings.showLines
         ? plan.lines.where((l) => l.kind != LineKind.sleep).toList()
@@ -252,7 +339,12 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     Widget row(Object e, {int? hourOf}) {
       final hourLabel = hourOf == null ? '' : fmtHour(hourOf);
       final child = e is PlanItem
-          ? ItemCard(item: e, date: date, highlight: widget.focusKey == e.key)
+          ? ItemCard(
+              item: e,
+              date: date,
+              highlight: widget.focusKey == e.key,
+              nested: children[e.key] ?? const [],
+            )
           : ReminderLineTile(line: e as ReminderLine, date: date);
       return Padding(
         padding: EdgeInsets.symmetric(vertical: e is PlanItem ? 4 : 0),
@@ -337,6 +429,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
           trailing: 'باقي ${fmtDuration(current.end - now)}',
         ),
       );
+      out.add(_NowProgress(item: current));
     } else if (upcoming != null) {
       out.add(
         _SectionHeader(
@@ -452,7 +545,12 @@ class _HabitChips extends ConsumerWidget {
                 icon: Icons.air,
                 label: 'تنفّس',
                 done: breathe.done,
-                onTap: () => ctrl.toggleLine(date, breathe.key, !breathe.done),
+                onTap: () => showBreatheDialog(
+                  context,
+                  ref,
+                  date,
+                  lineKey: breathe.done ? null : breathe.key,
+                ),
               ),
             ],
             if (stands.isNotEmpty) ...[
@@ -487,22 +585,48 @@ class _MiniRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final pct = (progress.ratio * 100).round();
+    final full = progress.total > 0 && progress.done >= progress.total;
     return Semantics(
       button: true,
       label: 'إنجاز اليوم ${progress.done} من ${progress.total}',
       excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,
-        child: ProgressRing(
-          progress: progress.ratio,
-          size: 40,
-          stroke: 3.5,
-          color: c.accent,
-          child: Text(
-            '${nums(pct)}٪',
-            style: T.micro.copyWith(fontSize: 10.5, color: c.ink),
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ProgressRing(
+              progress: progress.ratio,
+              size: 46,
+              stroke: 4,
+              color: full ? c.good : c.accent,
+              // العدد بدل نسبة صفرية لا تقول شي: «3/8» من مهام اليوم.
+              child: progress.total == 0
+                  ? Icon(Icons.check, size: 18, color: c.muted)
+                  : (full
+                        ? Icon(Icons.check, size: 20, color: c.good)
+                        : Directionality(
+                            textDirection: TextDirection.ltr,
+                            child: Text(
+                              nums('${progress.done}/${progress.total}'),
+                              style: T.micro.copyWith(
+                                fontSize: 11.5,
+                                color: c.ink,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'إنجازك',
+              style: T.micro.copyWith(
+                fontSize: 10,
+                color: c.muted,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -816,6 +940,170 @@ class _SectionHeader extends StatelessWidget {
               Text(trailing!, style: T.meta.copyWith(color: c.muted)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// مؤشر فوق بطاقة «الحين»: شريط يمتلئ من بداية المهمة إلى نهايتها مع الوقت،
+/// ونقطة عند اللحظة الحالية وفوقها الساعة.
+class _NowProgress extends ConsumerWidget {
+  const _NowProgress({required this.item});
+  final PlanItem item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    final clock = ref.watch(clockProvider);
+    final now = clock.hour * 60 + clock.minute + clock.second / 60;
+    final span = (item.end - item.start).clamp(1, 24 * 60);
+    final frac = ((now - item.start) / span).clamp(0.0, 1.0);
+    const knob = 14.0;
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(38, 2, 4, 6),
+      child: LayoutBuilder(
+        builder: (context, cons) {
+          final w = cons.maxWidth;
+          final x = (w - knob) * frac;
+          const labelW = 80.0;
+          final lx = (x + knob / 2 - labelW / 2).clamp(0.0, w - labelW);
+          return SizedBox(
+            height: 46,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PositionedDirectional(
+                  start: lx,
+                  top: 0,
+                  width: labelW,
+                  child: Text(
+                    fmtTime(now.floor()),
+                    textAlign: TextAlign.center,
+                    style: T.label.copyWith(
+                      fontSize: 12.5,
+                      color: c.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                PositionedDirectional(
+                  start: 0,
+                  end: 0,
+                  top: 22,
+                  child: Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: c.accentSoft,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+                PositionedDirectional(
+                  start: 0,
+                  top: 22,
+                  width: x + knob / 2,
+                  child: Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: c.accent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+                PositionedDirectional(
+                  start: x,
+                  top: 18,
+                  child: Container(
+                    width: knob,
+                    height: knob,
+                    decoration: BoxDecoration(
+                      color: c.card,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.accent, width: 3),
+                    ),
+                  ),
+                ),
+                PositionedDirectional(
+                  start: 0,
+                  top: 32,
+                  child: Text(
+                    fmtTime(item.start),
+                    style: T.micro.copyWith(
+                      color: c.muted,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+                PositionedDirectional(
+                  end: 0,
+                  top: 32,
+                  child: Text(
+                    fmtTime(item.end % minutesPerDay),
+                    style: T.micro.copyWith(
+                      color: c.muted,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// التواصل مفعّل بلا أشخاص: نطلب أول اسم بدل ما يبقى القسم صامتًا.
+class _ContactsInvite extends ConsumerWidget {
+  const _ContactsInvite();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: c.accentSoft,
+        borderRadius: BorderRadius.circular(R.lg),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.forum_outlined, color: c.accent),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('مين تبغى تتواصل معه؟', style: T.cardTitle),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'أضف أهلك وأصحابك، ونقترح لك اتصال أو رسالة في وقت فاضي من يومك.',
+            style: T.meta.copyWith(color: c.ink2, fontSize: 13),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              SmallButton(
+                label: 'أضف شخصًا',
+                icon: Icons.person_add_alt,
+                primary: true,
+                onTap: () => pushPage(context, const PersonEditPage()),
+              ),
+              const SizedBox(width: 8),
+              SmallButton(
+                label: 'لاحقًا',
+                onTap: () => ref
+                    .read(appDataProvider.notifier)
+                    .setMeta('contacts.invite', 'hidden'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

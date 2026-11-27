@@ -67,7 +67,7 @@ class _CommitmentReportState extends ConsumerState<CommitmentReport> {
           IconButton(
             tooltip: yearly ? 'السنة السابقة' : 'الشهر السابق',
             onPressed: () => _shift(-1),
-            icon: const Icon(Icons.chevron_right),
+            icon: const Icon(Icons.chevron_left),
           ),
           Expanded(
             child: Text(title, textAlign: TextAlign.center, style: T.section),
@@ -75,7 +75,7 @@ class _CommitmentReportState extends ConsumerState<CommitmentReport> {
           IconButton(
             tooltip: yearly ? 'السنة التالية' : 'الشهر التالي',
             onPressed: canNext ? () => _shift(1) : null,
-            icon: const Icon(Icons.chevron_left),
+            icon: const Icon(Icons.chevron_right),
           ),
         ],
       ),

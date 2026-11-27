@@ -189,7 +189,7 @@ class AppSettings {
     this.dailyCap = 12,
     this.eveningReview = true,
     this.fontSize = FontSize.medium,
-    this.arabicDigits = true,
+    this.arabicDigits = false,
     this.theme = ThemePref.system,
     this.headerDate = HeaderDate.both,
     this.showLines = true,
@@ -296,7 +296,7 @@ class AppSettings {
     'dailyCap': dailyCap,
     'eveningReview': eveningReview,
     'fontSize': fontSize.name,
-    'arabicDigits': arabicDigits,
+    'digits': arabicDigits ? 'arabic' : 'latin',
     'theme': theme.name,
     'headerDate': headerDate.name,
     'showLines': showLines,
@@ -321,7 +321,8 @@ class AppSettings {
     dailyCap: (j['dailyCap'] as int?) ?? 12,
     eveningReview: (j['eveningReview'] as bool?) ?? true,
     fontSize: FontSize.values.byName((j['fontSize'] as String?) ?? 'medium'),
-    arabicDigits: (j['arabicDigits'] as bool?) ?? true,
+    // المفتاح القديم «arabicDigits» كان افتراضه الهندية؛ نتجاهله حتى يرجع الكل إلى 123.
+    arabicDigits: j['digits'] == 'arabic',
     theme: ThemePref.values.byName((j['theme'] as String?) ?? 'system'),
     headerDate: HeaderDate.values.byName(
       (j['headerDate'] as String?) ?? 'both',

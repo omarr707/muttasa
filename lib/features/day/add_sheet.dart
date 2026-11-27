@@ -5,21 +5,15 @@ import 'package:schedule_core/schedule_core.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../state/providers.dart';
+import '../settings/contacts_screens.dart' show PersonEditPage;
 import 'item_sheet.dart';
 
 class _AddType {
-  const _AddType(
-    this.kind,
-    this.title,
-    this.desc,
-    this.icon, {
-    this.enabled = true,
-  });
-  final OneOffKind? kind;
+  const _AddType(this.kind, this.title, this.desc, this.icon);
+  final OneOffKind kind;
   final String title;
   final String desc;
   final IconData icon;
-  final bool enabled;
 }
 
 const _types = [
@@ -48,11 +42,10 @@ const _types = [
     Icons.event_outlined,
   ),
   _AddType(
-    null,
+    OneOffKind.contact,
     'تواصل',
-    'اتصال أو رسالة أو زيارة. في المرحلة الثانية',
+    'اتصال أو رسالة أو زيارة لشخص',
     Icons.call_outlined,
-    enabled: false,
   ),
   _AddType(
     OneOffKind.reminder,
@@ -99,32 +92,27 @@ Future<void> showAddSheet(BuildContext context, WidgetRef ref, Day date) async {
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   for (final t in _types)
-                    Opacity(
-                      opacity: t.enabled ? 1 : .45,
-                      child: MCard(
-                        onTap: t.enabled
-                            ? () => Navigator.pop(ctx, t.kind)
-                            : null,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(t.icon, color: c.ink),
-                            const Spacer(),
-                            Text(
-                              t.title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
+                    MCard(
+                      onTap: () => Navigator.pop(ctx, t.kind),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(t.icon, color: c.ink),
+                          const Spacer(),
+                          Text(
+                            t.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
-                            Text(
-                              t.desc,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12, color: c.ink2),
-                            ),
-                          ],
-                        ),
+                          ),
+                          Text(
+                            t.desc,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: c.ink2),
+                          ),
+                        ],
                       ),
                     ),
                 ],
@@ -165,6 +153,31 @@ class _AddFormState extends ConsumerState<_AddForm> {
   Window _window = Window.any;
   Rule? _habit;
 
+  // التواصل.
+  Person? _person;
+  String _method = 'call';
+
+  // البطاقة الأب (اختياري).
+  PlanItem? _parent;
+
+  static const _methods = ['call', 'message', 'visit'];
+  static const _methodLabels = {
+    'call': 'اتصال',
+    'message': 'رسالة',
+    'visit': 'زيارة',
+  };
+  static const _methodMinutes = {'call': 15, 'message': 5, 'visit': 60};
+
+  void _pickPerson(Person p) => setState(() {
+    _person = p;
+    _method = switch (p.method) {
+      ContactMethod.visit => 'visit',
+      ContactMethod.sms || ContactMethod.whatsapp => 'message',
+      _ => 'call',
+    };
+    _duration = _methodMinutes[_method]!;
+  });
+
   @override
   void initState() {
     super.initState();
@@ -172,6 +185,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
     _start = ((now + 60) ~/ 30) * 30 % minutesPerDay;
     if (widget.kind == OneOffKind.period) _duration = 60;
     if (widget.kind == OneOffKind.event) _duration = 120;
+    if (widget.kind == OneOffKind.contact) _duration = 15;
   }
 
   @override
@@ -194,7 +208,20 @@ class _AddFormState extends ConsumerState<_AddForm> {
         .toList();
     final isHabit = widget.kind == OneOffKind.habitSession;
     final isReminder = widget.kind == OneOffKind.reminder;
-    final canSave = isHabit ? _habit != null : _title.text.trim().isNotEmpty;
+    final isContact = widget.kind == OneOffKind.contact;
+    final people = ref.watch(appDataProvider.select((d) => d.people));
+    final canSave = isHabit
+        ? _habit != null
+        : (isContact ? _person != null : _title.text.trim().isNotEmpty);
+    final canNest = widget.kind == OneOffKind.task || isContact;
+    final parents = canNest
+        ? ref
+              .watch(dayPlanProvider(_date))
+              .items
+              .where((i) => i.kind != ItemKind.contact || i.oneOffId == null)
+              .where((i) => !_isChild(i))
+              .toList()
+        : const <PlanItem>[];
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -224,6 +251,50 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 onSelected: (r) => setState(() {
                   _habit = r;
                   _duration = (r.config as FlexConfig).duration;
+                }),
+              ),
+            ] else if (isContact) ...[
+              const FieldLabel('مع مين؟'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final p in people)
+                    ChoiceChip(
+                      label: Text(p.name),
+                      selected: _person?.id == p.id,
+                      showCheckmark: false,
+                      onSelected: (_) => _pickPerson(p),
+                    ),
+                  ActionChip(
+                    avatar: const Icon(Icons.person_add_alt, size: 18),
+                    label: const Text('أضف شخصًا'),
+                    onPressed: () async {
+                      final before = people.map((p) => p.id).toSet();
+                      await Navigator.of(context, rootNavigator: true).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const PersonEditPage(),
+                        ),
+                      );
+                      if (!mounted) return;
+                      final added = ref
+                          .read(appDataProvider)
+                          .people
+                          .where((p) => !before.contains(p.id))
+                          .firstOrNull;
+                      if (added != null) _pickPerson(added);
+                    },
+                  ),
+                ],
+              ),
+              const FieldLabel('الطريقة'),
+              ChoiceChips<String>(
+                values: _methods,
+                label: (m) => _methodLabels[m]!,
+                selected: (m) => m == _method,
+                onSelected: (m) => setState(() {
+                  _method = m;
+                  _duration = _methodMinutes[m]!;
                 }),
               ),
             ] else ...[
@@ -268,7 +339,7 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 ),
               ],
             ),
-            if (widget.kind == OneOffKind.task || isHabit) ...[
+            if (widget.kind == OneOffKind.task || isHabit || isContact) ...[
               const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -310,6 +381,44 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 onSelected: (v) => setState(() => _duration = v),
               ),
             ],
+            if (parents.isNotEmpty) ...[
+              const FieldLabel('تحت بطاقة (اختياري)'),
+              Text(
+                'يظهر داخل البطاقة الأب في «يومي» كعنصر فرعي.',
+                style: TextStyle(color: c.muted, fontSize: 12),
+              ),
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 8),
+                      child: ChoiceChip(
+                        label: const Text('بدون'),
+                        selected: _parent == null,
+                        showCheckmark: false,
+                        onSelected: (_) => setState(() => _parent = null),
+                      ),
+                    ),
+                    for (final p in parents)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 8),
+                        child: ChoiceChip(
+                          label: Text('${p.title} · ${fmtTime(p.start)}'),
+                          selected: _parent?.key == p.key,
+                          showCheckmark: false,
+                          onSelected: (_) => setState(() {
+                            _parent = p;
+                            _timed = true;
+                            _start = p.start;
+                          }),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
             if (widget.kind == OneOffKind.period ||
                 widget.kind == OneOffKind.event)
               Padding(
@@ -327,19 +436,48 @@ class _AddFormState extends ConsumerState<_AddForm> {
     );
   }
 
+  bool _isChild(PlanItem i) {
+    if (i.key.startsWith('once:friday-')) return true;
+    if (i.oneOffId == null) return false;
+    return ref
+            .read(appDataProvider)
+            .oneOffs
+            .where((o) => o.id == i.oneOffId)
+            .firstOrNull
+            ?.parent !=
+        null;
+  }
+
   Future<void> _save() async {
     final isHabit = widget.kind == OneOffKind.habitSession;
+    final isContact = widget.kind == OneOffKind.contact;
     final hc = _habit?.config as FlexConfig?;
     final timed = _timed || widget.kind == OneOffKind.reminder;
+    final p = _person;
+    final title = isHabit
+        ? 'جلسة إضافية: ${hc!.title}'
+        : isContact
+        ? switch (_method) {
+            'message' => 'أرسل لـ${p!.name}',
+            'visit' => 'زيارة ${p!.name}',
+            _ => 'اتصل بـ${p!.name}',
+          }
+        : _title.text.trim();
     final o = OneOff(
       id: newId(),
       kind: widget.kind,
-      title: isHabit ? 'جلسة إضافية: ${hc!.title}' : _title.text.trim(),
+      title: title,
       date: _date,
       start: timed ? _start : null,
       duration: _duration,
       window: _window,
       habitKey: _habit?.key,
+      icon: isContact ? _method : null,
+      personId: p?.id,
+      note: isContact && _method == 'message'
+          ? contactDraft(p!, timed ? _start : 17 * 60)
+          : (isContact ? p!.relation.label : null),
+      parent: _parent?.key,
     );
     final ctrl = ref.read(appDataProvider.notifier);
     await ctrl.addOneOff(o);

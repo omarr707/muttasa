@@ -663,8 +663,8 @@ class AppearancePage extends ConsumerWidget {
         ),
         label('الأرقام'),
         Segmented<bool>(
-          values: const [true, false],
-          labels: const ['١٢٣', '123'],
+          values: const [false, true],
+          labels: const ['123', '١٢٣'],
           selected: s.arabicDigits,
           onChanged: (v) => ctrl.updateSettings(s.copyWith(arabicDigits: v)),
         ),

@@ -10,6 +10,7 @@ import '../../core/widgets.dart';
 import '../../services/contact_actions.dart';
 import '../../state/providers.dart';
 import '../goals/amount_sheet.dart';
+import 'breathe_sheet.dart';
 import 'item_sheet.dart';
 import 'water_sheet.dart';
 
@@ -22,10 +23,14 @@ class ItemCard extends ConsumerWidget {
     required this.date,
     this.highlight = false,
     this.missedDot = false,
+    this.nested = const [],
   });
   final PlanItem item;
   final Day date;
   final bool highlight;
+
+  /// العناصر الفرعية التي تُعرض داخل هذه البطاقة الأب.
+  final List<PlanItem> nested;
 
   /// نقطة كهرمانية في سطر الوصف (داخل ورقة «فاتت» فقط).
   final bool missedDot;
@@ -266,6 +271,11 @@ class ItemCard extends ConsumerWidget {
                   _PagesRow(item: i, date: date),
                 if (i.subs.isNotEmpty)
                   _Subs(item: i, date: date, enabled: !isFuture),
+                if (nested.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(22, 0, 8, 8),
+                    child: ChildItems(items: nested, date: date),
+                  ),
               ],
             ),
           ),
@@ -358,6 +368,106 @@ class _DraftLine extends StatelessWidget {
             style: T.micro.copyWith(color: c.muted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// العناصر الفرعية تحت بطاقة أب: خط رأسي يربطها، وكل عنصر بوقته وتأكيده.
+class ChildItems extends StatelessWidget {
+  const ChildItems({super.key, required this.items, required this.date});
+  final List<PlanItem> items;
+  final Day date;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      padding: const EdgeInsetsDirectional.only(start: 12),
+      decoration: BoxDecoration(
+        border: BorderDirectional(
+          start: BorderSide(color: c.lineStrong, width: 2),
+        ),
+      ),
+      child: Column(
+        children: [for (final i in items) ChildItemRow(item: i, date: date)],
+      ),
+    );
+  }
+}
+
+class ChildItemRow extends ConsumerWidget {
+  const ChildItemRow({super.key, required this.item, required this.date});
+  final PlanItem item;
+  final Day date;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    final i = item;
+    final today = ref.watch(todayProvider);
+    final now = ref.watch(nowMinuteProvider);
+    final isFuture = date.isAfter(today);
+    final done = i.isDoneLike;
+    final isNow =
+        date == today &&
+        i.start <= now &&
+        now < i.end &&
+        i.status == ItemStatus.pending;
+    final ctrl = ref.read(appDataProvider.notifier);
+    final canCheck = !isFuture && i.track != TrackMode.auto;
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      decoration: BoxDecoration(
+        color: done ? Colors.transparent : c.sunk,
+        borderRadius: BorderRadius.circular(R.sm),
+        border: isNow ? Border.all(color: c.accent, width: 1.5) : null,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(R.sm),
+        onTap: () => showItemSheet(context, ref, i, date),
+        child: Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 2, 0, 2),
+          child: Row(
+            children: [
+              Icon(iconFor(i.icon), size: 18, color: done ? c.muted : c.ink2),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      i.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: T.label.copyWith(
+                        fontSize: 13.5,
+                        color: done ? c.muted : c.ink,
+                        decoration: done ? TextDecoration.lineThrough : null,
+                        decorationColor: c.muted,
+                      ),
+                    ),
+                    Text(
+                      fmtRange(i.start, i.end % minutesPerDay),
+                      style: T.micro.copyWith(
+                        color: c.muted,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (canCheck)
+                CheckCircle(
+                  size: 24,
+                  checked: done,
+                  label: done ? 'ألغِ ${i.title}' : 'تمّت ${i.title}',
+                  onTap: () =>
+                      done ? ctrl.undo(date, i.key) : ctrl.markDone(date, i),
+                )
+              else
+                const SizedBox(height: 38),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -681,6 +791,8 @@ class ReminderLineTile extends ConsumerWidget {
     if (!date.isAfter(today)) {
       if (line.kind == LineKind.water) {
         onTap = () => showWaterSheet(context, ref, date);
+      } else if (line.kind == LineKind.breathe && !line.done) {
+        onTap = () => showBreatheDialog(context, ref, date, lineKey: line.key);
       } else if (line.kind == LineKind.breathe ||
           line.kind == LineKind.custom) {
         onTap = () => ref

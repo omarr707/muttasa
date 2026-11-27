@@ -591,7 +591,7 @@ class _PartnerTile extends ConsumerWidget {
                 : 'وزّعوا المشاوير، وأرسل جدول الأسبوع بواتساب',
             style: T.meta.copyWith(color: c.muted),
           ),
-          trailing: Icon(Icons.chevron_left, color: c.muted),
+          trailing: Icon(Icons.chevron_right, color: c.muted),
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute<void>(builder: (_) => const PartnerPage())),
