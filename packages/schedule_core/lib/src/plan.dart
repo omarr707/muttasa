@@ -2,6 +2,7 @@ import 'day.dart';
 import 'prayer.dart';
 import 'records.dart';
 import 'rules.dart';
+import 'season.dart';
 
 /// نوع العنصر المولّد، يحدد شكل البطاقة وإجراءها.
 enum ItemKind {
@@ -51,6 +52,8 @@ class PlanItem {
     this.log,
     this.subs = const [],
     this.personId,
+    this.partner = false,
+    this.source,
   });
 
   /// المفتاح الثابت (date, itemKey) مثل habit:read#2 أو prayer:fajr.
@@ -94,6 +97,12 @@ class PlanItem {
 
   /// لبطاقات التواصل: الشخص المقترح.
   final String? personId;
+
+  /// مشوار على الشريك اليوم: للعلم فقط، لا يحجز وقتًا ولا يُحسب.
+  final bool partner;
+
+  /// مصدر الموعد المستورد (Google أو Apple…). null = ليس مستوردًا.
+  final String? source;
 
   int get duration => end - start;
   Span get span => Span(start, end);
@@ -153,6 +162,8 @@ class PlanItem {
     log: log ?? this.log,
     subs: subs,
     personId: personId,
+    partner: partner,
+    source: source,
   );
 
   @override
@@ -245,6 +256,8 @@ class DayPlan {
     required this.wake,
     required this.bedtime,
     this.workOff = false,
+    this.context,
+    this.allDay = const [],
   });
 
   final Day date;
@@ -261,6 +274,12 @@ class DayPlan {
   final int wake;
   final int bedtime;
   final bool workOff;
+
+  /// سياق اليوم: الهجري، رمضان، العيد، الوضع، العطلة.
+  final DayContext? context;
+
+  /// مواعيد التقويم طوال اليوم: تظهر في رأس اليوم ولا تحجز وقتًا.
+  final List<String> allDay;
 
   PlanItem? byKey(String key) {
     for (final i in items) {

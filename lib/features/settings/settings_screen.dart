@@ -14,6 +14,7 @@ import '../routine/labels.dart';
 import '../routine/preview.dart';
 import '../routine/rule_editors.dart';
 import 'contacts_screens.dart';
+import 'season_screens.dart';
 
 void pushPage(BuildContext context, Widget page) =>
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
@@ -84,6 +85,32 @@ class SettingsScreen extends ConsumerWidget {
                     value: p.calcMethod.label,
                     onTap: () => pushPage(context, const PrayerTimesPage()),
                   ),
+              ],
+            ),
+            SettingsGroup(
+              title: 'المواسم والأوضاع',
+              children: [
+                if (p.islam)
+                  SettingsRow(
+                    icon: Icons.nightlight_outlined,
+                    title: 'رمضان والعيد',
+                    value: s.season.fasting.label,
+                    onTap: () => pushPage(context, const RamadanPage()),
+                  ),
+                SettingsRow(
+                  icon: Icons.luggage_outlined,
+                  title: 'الإجازة والسفر والإيقاف',
+                  value: _modeValue(data.modes, ref.watch(todayProvider)),
+                  onTap: () => pushPage(context, const ModesPage()),
+                ),
+                SettingsRow(
+                  icon: Icons.calendar_month_outlined,
+                  title: 'التقويمات',
+                  value: data.calendar.linked
+                      ? '${nums(data.calendar.calendars.length)} مربوط'
+                      : 'غير مربوط',
+                  onTap: () => pushPage(context, const CalendarsPage()),
+                ),
               ],
             ),
             SettingsGroup(
@@ -170,7 +197,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Center(
               child: Text(
-                'مُتَّسَع ${nums('0.2.0')}',
+                'مُتَّسَع ${nums('0.3.0')}',
                 style: T.micro.copyWith(color: context.c.muted),
               ),
             ),
@@ -179,6 +206,14 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _modeValue(List<LifeMode> modes, Day today) {
+  final now = modes.where((m) => m.covers(today)).firstOrNull;
+  if (now != null) return '${now.kind.label} الآن';
+  final next = modes.where((m) => m.from.isAfter(today)).firstOrNull;
+  if (next != null) return '${next.kind.label} ${fmtDayShort(next.from)}';
+  return 'لا شيء';
 }
 
 /// النوم والدوام.

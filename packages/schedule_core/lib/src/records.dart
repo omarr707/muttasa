@@ -114,6 +114,7 @@ class DayOverride {
     this.start,
     this.off = false,
     this.reason,
+    this.who,
   });
   final Day date;
   final String itemKey;
@@ -125,12 +126,16 @@ class DayOverride {
   final bool off;
   final String? reason;
 
+  /// تبديل من يسوّي مشوار الأولاد اليوم: `me` أو `partner`.
+  final String? who;
+
   Map<String, Object?> toJson() => {
     'date': date.key,
     'itemKey': itemKey,
     'start': start,
     'off': off,
     'reason': reason,
+    if (who != null) 'who': who,
   };
   factory DayOverride.fromJson(Map<String, Object?> j) => DayOverride(
     date: Day.parse(j['date']! as String),
@@ -138,6 +143,7 @@ class DayOverride {
     start: j['start'] as int?,
     off: (j['off'] as bool?) ?? false,
     reason: j['reason'] as String?,
+    who: j['who'] as String?,
   );
 }
 

@@ -1,4 +1,5 @@
 import 'day.dart';
+import 'season.dart';
 
 enum Religion { islam, none }
 
@@ -197,6 +198,7 @@ class AppSettings {
     this.lastWaterMl = 250,
     this.fridaySheet = true,
     this.goalsEnabled = true,
+    this.season = const SeasonSettings(),
   });
 
   /// الحد اليومي للوقت الاختياري.
@@ -242,6 +244,9 @@ class AppSettings {
   /// تبويب «أهدافي».
   final bool goalsEnabled;
 
+  /// رمضان والعيد والصيام والعطل الرسمية.
+  final SeasonSettings season;
+
   AppSettings copyWith({
     int? optionalCapMinutes,
     Set<NotifyKind>? notifyEnabled,
@@ -260,6 +265,7 @@ class AppSettings {
     int? lastWaterMl,
     bool? fridaySheet,
     bool? goalsEnabled,
+    SeasonSettings? season,
   }) => AppSettings(
     optionalCapMinutes: optionalCapMinutes ?? this.optionalCapMinutes,
     notifyEnabled: notifyEnabled ?? this.notifyEnabled,
@@ -278,6 +284,7 @@ class AppSettings {
     lastWaterMl: lastWaterMl ?? this.lastWaterMl,
     fridaySheet: fridaySheet ?? this.fridaySheet,
     goalsEnabled: goalsEnabled ?? this.goalsEnabled,
+    season: season ?? this.season,
   );
 
   Map<String, Object?> toJson() => {
@@ -298,6 +305,7 @@ class AppSettings {
     'lastWaterMl': lastWaterMl,
     'fridaySheet': fridaySheet,
     'goalsEnabled': goalsEnabled,
+    'season': season.toJson(),
   };
 
   factory AppSettings.fromJson(Map<String, Object?> j) => AppSettings(
@@ -324,5 +332,10 @@ class AppSettings {
     lastWaterMl: (j['lastWaterMl'] as int?) ?? 250,
     fridaySheet: (j['fridaySheet'] as bool?) ?? true,
     goalsEnabled: (j['goalsEnabled'] as bool?) ?? true,
+    season: j['season'] == null
+        ? const SeasonSettings()
+        : SeasonSettings.fromJson(
+            (j['season']! as Map).cast<String, Object?>(),
+          ),
   );
 }

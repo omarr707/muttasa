@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:schedule_core/schedule_core.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/calendar_link.dart';
 import '../data/defaults.dart';
 import '../data/repository.dart';
+import '../services/calendar.dart';
 
 final repositoryProvider = Provider<Repository>(
   (ref) => throw UnimplementedError('يُحقن في main'),
@@ -49,25 +51,50 @@ final appDataProvider = NotifierProvider<AppController, AppData>(
   AppController.new,
 );
 
-final prayerCalcProvider = Provider<PrayerCalculator?>((ref) {
+/// المواقيت: لمدينة المستخدم، ولمدينة الوجهة في أيام السفر.
+final prayerCalcProvider = Provider<TravelAwarePrayers?>((ref) {
   final p = ref.watch(appDataProvider.select((d) => d.profile));
+  final modes = ref.watch(appDataProvider.select((d) => d.modes));
   if (p == null) return null;
-  return PrayerCalculator.forProfile(p);
+  return TravelAwarePrayers(p, modes);
 });
+
+/// المناسبات الوطنية والعطل لدولة المستخدم.
+final holidaysProvider = Provider<List<Holiday>>((ref) {
+  final code = ref.watch(appDataProvider.select((d) => d.profile?.country));
+  return _holidaysOf(ref, code);
+});
+
+List<Holiday> _holidaysOf(Ref ref, String? code) {
+  if (code == null) return const [];
+  try {
+    return ref
+            .read(defaultsProvider)
+            .countries
+            .where((c) => c.code == code)
+            .firstOrNull
+            ?.holidays ??
+        const [];
+  } catch (_) {
+    return const []; // الاختبارات بلا إعدادات افتراضية.
+  }
+}
 
 /// المحرك للبيانات الحالية. يُعاد بناؤه عند أي كتابة أو تغيّر اليوم.
 final engineProvider = Provider<ScheduleEngine>((ref) {
   final d = ref.watch(appDataProvider);
   final today = ref.watch(todayProvider);
   final calc = ref.watch(prayerCalcProvider);
-  return ScheduleEngine(buildInput(d, calc, today));
+  final holidays = ref.watch(holidaysProvider);
+  return ScheduleEngine(buildInput(d, calc, today, holidays: holidays));
 });
 
 EngineInput buildInput(
   AppData d,
-  PrayerCalculator? calc,
+  TravelAwarePrayers? calc,
   Day today, {
   List<Rule>? rules,
+  List<Holiday> holidays = const [],
 }) => EngineInput(
   profile: d.profile!,
   settings: d.settings,
@@ -78,6 +105,10 @@ EngineInput buildInput(
   logs: d.logs,
   people: d.people,
   contacts: d.contacts,
+  modes: d.modes,
+  holidays: holidays,
+  partner: d.partner,
+  imported: d.calendar.events,
   prayers: calc?.forDay ?? (_) => DayPrayers.neutral,
   today: today,
   nowMinute: 0,
@@ -106,17 +137,21 @@ class AppController extends Notifier<AppData> {
   AppData build() => ref.read(initialDataProvider);
 
   Repository get _repo => ref.read(repositoryProvider);
-  PrayerCalculator? _calc;
-  UserProfile? _calcFor;
+  TravelAwarePrayers? _calc;
+  (UserProfile, List<LifeMode>)? _calcFor;
 
   /// محرك للحالة الحالية. لا نقرأ engineProvider هنا لأنه يعتمد على هذا الـ Notifier.
   ScheduleEngine get _engine {
     final p = state.profile!;
-    if (_calc == null || !identical(_calcFor, p)) {
-      _calc = PrayerCalculator.forProfile(p);
-      _calcFor = p;
+    if (_calc == null ||
+        !identical(_calcFor?.$1, p) ||
+        !identical(_calcFor?.$2, state.modes)) {
+      _calc = TravelAwarePrayers(p, state.modes);
+      _calcFor = (p, state.modes);
     }
-    return ScheduleEngine(buildInput(state, _calc, _today));
+    return ScheduleEngine(
+      buildInput(state, _calc, _today, holidays: _holidaysOf(ref, p.country)),
+    );
   }
 
   Day get _today => ref.read(todayProvider);
@@ -700,6 +735,84 @@ class AppController extends Notifier<AppData> {
       }
     }
     state = state.copyWith(rules: next);
+  }
+
+  // --------------------------------------------------------------------------
+  // المواسم والأوضاع
+  // --------------------------------------------------------------------------
+
+  Future<void> updateSeason(SeasonSettings season) =>
+      updateSettings(state.settings.copyWith(season: season));
+
+  /// «نبدأ جدول رمضان؟»: الجواب يُحفظ للسنة الهجرية.
+  Future<void> answerRamadan(int hijriYear, bool start) {
+    final s = state.settings.season;
+    return updateSeason(
+      s.copyWith(ramadanYears: {...s.ramadanYears, hijriYear: start}),
+    );
+  }
+
+  Future<void> saveMode(LifeMode m) async {
+    final list = [...state.modes];
+    final i = list.indexWhere((e) => e.id == m.id);
+    if (i >= 0) {
+      list[i] = m;
+    } else {
+      list.add(m);
+    }
+    list.sort((a, b) => a.from.compareTo(b.from));
+    await _repo.saveModes(list);
+    state = state.copyWith(modes: list);
+  }
+
+  Future<void> deleteMode(String id) async {
+    final list = state.modes.where((m) => m.id != id).toList();
+    await _repo.saveModes(list);
+    state = state.copyWith(modes: list);
+  }
+
+  /// ينهي الوضع اليوم: يبقى في التاريخ لكنه لا يسري على بكرة.
+  Future<void> endModeToday(LifeMode m) async {
+    final today = _today;
+    if (m.from.isAfter(today.prev)) return deleteMode(m.id);
+    await saveMode(m.copyWith(to: today.prev));
+  }
+
+  Future<void> savePartner(PartnerShare p) async {
+    await _repo.savePartner(p);
+    state = state.copyWith(partner: p);
+  }
+
+  /// تبديل من يسوّي المشوار هذا اليوم فقط.
+  Future<void> swapRun(Day d, PlanItem i) => setOverride(
+    DayOverride(
+      date: d,
+      itemKey: i.key,
+      who: i.partner ? 'me' : 'partner',
+      reason: 'تبديل المشوار',
+    ),
+  );
+
+  Future<void> saveCalendar(CalendarLink c) async {
+    await _repo.saveCalendar(c);
+    state = state.copyWith(calendar: c);
+  }
+
+  /// يقرأ مواعيد التقويمات المربوطة من الجهاز (قراءة فقط) لشهر قدام.
+  Future<void> refreshCalendar() async {
+    final link = state.calendar;
+    if (!link.linked) return;
+    try {
+      final events = await CalendarService.fetch(
+        link.calendars,
+        from: _today.prev,
+      );
+      await saveCalendar(
+        CalendarLink(calendars: link.calendars, events: events),
+      );
+    } catch (_) {
+      // بلا إذن أو تقويم محذوف: نبقي آخر نسخة.
+    }
   }
 
   // --------------------------------------------------------------------------

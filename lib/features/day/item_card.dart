@@ -82,8 +82,9 @@ class ItemCard extends ConsumerWidget {
         nums(i.subtitle),
       if (i.pagesFrom != null && i.kind == ItemKind.quran)
         'وردك ${nums(i.pagesTo! - i.pagesFrom! + 1)} صفحات',
-      if (i.track == TrackMode.auto && !done && !off && !isFuture)
+      if (i.track == TrackMode.auto && i.counted && !done && !off && !isFuture)
         'تُحسب تلقائيًا',
+      if (i.partner) 'للعلم',
     ].join(' · ');
 
     // الإجراء الواحد.
@@ -173,7 +174,7 @@ class ItemCard extends ConsumerWidget {
       label: '${i.title}، ${fmtRange(i.start, i.end % minutesPerDay)}',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
-        opacity: off ? .7 : 1,
+        opacity: off || i.partner ? .7 : 1,
         child: Material(
           color: done ? c.sunk : c.card,
           shape: RoundedRectangleBorder(

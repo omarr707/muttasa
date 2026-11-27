@@ -153,3 +153,6 @@ String fmtWeekdays(Set<int> days) {
   }
   return ordered.map((d) => arabicWeekdays[d]).join('، ');
 }
+
+/// «5 ديسمبر».
+String fmtDayShort(Day d) => nums('${d.day} ${arabicMonths[d.month - 1]}');

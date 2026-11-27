@@ -58,6 +58,9 @@ class _MuttasaAppState extends ConsumerState<MuttasaApp>
     ref.read(clockProvider.notifier).refresh();
     if (!ref.read(appDataProvider).onboarded) return;
     await ref.read(appDataProvider.notifier).closePastDays();
+    if (widget.notifications) {
+      await ref.read(appDataProvider.notifier).refreshCalendar();
+    }
     _scheduleSoon();
   }
 

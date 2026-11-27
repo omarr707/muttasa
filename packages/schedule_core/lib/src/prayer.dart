@@ -3,6 +3,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import 'day.dart';
 import 'profile.dart';
+import 'season.dart';
 
 /// مواقيت يوم واحد بالدقائق من منتصف الليل بتوقيت المدينة.
 class DayPrayers {
@@ -98,4 +99,34 @@ class PrayerCalculator {
       isha: m(pt.isha),
     );
   });
+}
+
+/// مواقيت تتبع السفر: في أيام السفر تُحسب لمدينة الوجهة ومنطقتها الزمنية،
+/// وفي باقي الأيام لمدينة المستخدم.
+class TravelAwarePrayers {
+  TravelAwarePrayers(this.profile, List<LifeMode> modes)
+    : _trips = modes.where((m) => m.hasPlace).toList(),
+      _home = PrayerCalculator.forProfile(profile);
+
+  final UserProfile profile;
+  final List<LifeMode> _trips;
+  final PrayerCalculator _home;
+  final _calcs = <String, PrayerCalculator>{};
+
+  DayPrayers forDay(Day d) {
+    for (final m in _trips) {
+      if (!m.covers(d)) continue;
+      final calc = _calcs.putIfAbsent(
+        m.id,
+        () => PrayerCalculator(
+          lat: m.lat!,
+          lng: m.lng!,
+          method: m.calcMethod ?? profile.calcMethod,
+          location: tz.getLocation(m.timezone!),
+        ),
+      );
+      return calc.forDay(d);
+    }
+    return _home.forDay(d);
+  }
 }

@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/library.dart';
 import '../../state/providers.dart';
+import '../settings/season_screens.dart';
 import 'labels.dart';
 import 'preview.dart';
 import 'rule_editors.dart';
@@ -87,6 +88,7 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
       const SectionTitle('مواعيدك الثابتة'),
       for (final r in fixedRules)
         _RuleTile(rule: r, today: today, city: profile.city),
+      if (fixedRules.any((r) => r.kind == RuleKind.kid)) _PartnerTile(),
       if (fixedRules.isEmpty)
         MCard(
           dashed: true,
@@ -560,6 +562,39 @@ class _SleepTile extends ConsumerWidget {
             ),
             Icon(Icons.tune, color: c.muted, size: 20),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// «مشاركة مع الزوج/الزوجة» تحت مشاوير الأولاد.
+class _PartnerTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final share = ref.watch(appDataProvider.select((d) => d.partner));
+    final c = context.c;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(R.md),
+          side: BorderSide(color: c.line),
+        ),
+        child: ListTile(
+          leading: Icon(Icons.people_outline, color: c.ink2),
+          title: const Text('مشاركة مع الزوج/الزوجة', style: T.cardTitle),
+          subtitle: Text(
+            share.active
+                ? 'مع ${share.name} · ${nums(share.runs.values.where((r) => r.who != RunWho.me).length)} مشاوير عليه'
+                : 'وزّعوا المشاوير، وأرسل جدول الأسبوع بواتساب',
+            style: T.meta.copyWith(color: c.muted),
+          ),
+          trailing: Icon(Icons.chevron_left, color: c.muted),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const PartnerPage())),
         ),
       ),
     );

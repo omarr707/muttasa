@@ -30,6 +30,24 @@ class FridayClock extends FixedClock {
   DateTime build() => DateTime(2026, 11, 27, 9, 48);
 }
 
+/// 29 شعبان 1448: بطاقة «نبدأ جدول رمضان؟».
+class RamadanEveClock extends FixedClock {
+  @override
+  DateTime build() => DateTime(2027, 2, 6, 10, 0);
+}
+
+/// ثاني أيام رمضان قبيل الإفطار.
+class RamadanClock extends FixedClock {
+  @override
+  DateTime build() => DateTime(2027, 2, 9, 17, 20);
+}
+
+/// أول أيام عيد الفطر 1448.
+class EidClock extends FixedClock {
+  @override
+  DateTime build() => DateTime(2027, 3, 9, 8, 0);
+}
+
 Future<void> loadFonts() async {
   Future<void> load(String family, List<String> files) async {
     final loader = FontLoader(family);
@@ -282,6 +300,7 @@ void main() {
     Brightness brightness = Brightness.light,
     bool friday = false,
     AppData? data,
+    FixedClock Function()? clock,
   }) async {
     tester.view.physicalSize = const Size(390 * 2, 844 * 2);
     tester.view.devicePixelRatio = 2;
@@ -298,7 +317,9 @@ void main() {
             ),
           ),
           initialDataProvider.overrideWithValue(data ?? sample()),
-          clockProvider.overrideWith(friday ? FridayClock.new : FixedClock.new),
+          clockProvider.overrideWith(
+            clock ?? (friday ? FridayClock.new : FixedClock.new),
+          ),
         ],
         child: const MuttasaApp(notifications: false),
       ),
@@ -464,10 +485,14 @@ void main() {
     await tester.tap(find.text('الإعدادات'));
     await tester.pumpAndSettle();
     await shot(tester, 'settings');
+    await tester.ensureVisible(find.text('المظهر'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('المظهر'));
     await tester.pumpAndSettle();
     await shot(tester, 'appearance');
     await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('التواصل مع الناس'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('التواصل مع الناس'));
     await tester.pumpAndSettle();
@@ -485,6 +510,94 @@ void main() {
     await tester.tap(find.text('جدول الأسبوع'));
     await tester.pumpAndSettle();
     await shot(tester, 'contacts_week');
+  });
+
+  testWidgets('رمضان: البطاقة ثم الجدول', (tester) async {
+    await pumpApp(tester, clock: RamadanEveClock.new);
+    expect(find.text('رمضان بعد يومين. نجهّز جدول رمضان؟'), findsOneWidget);
+    await shot(tester, 'ramadan_prompt');
+    await tester.tap(find.text('ابدأ جدول رمضان'));
+    await tester.pumpAndSettle();
+    expect(find.text('ابدأ جدول رمضان'), findsNothing);
+  });
+
+  testWidgets('يوم في رمضان', (tester) async {
+    final d = sample();
+    await pumpApp(
+      tester,
+      clock: RamadanClock.new,
+      data: d.copyWith(
+        settings: d.settings.copyWith(
+          season: const SeasonSettings(ramadanYears: {1448: true}),
+        ),
+      ),
+    );
+    expect(find.text('رمضان · اليوم ٢'), findsOneWidget);
+    await shot(tester, 'ramadan_day');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    expect(find.text('صلاة التراويح'), findsOneWidget);
+    await shot(tester, 'ramadan_evening');
+  });
+
+  testWidgets('العيد', (tester) async {
+    await pumpApp(tester, clock: EidClock.new);
+    expect(find.text('عيد الفطر مبارك'), findsOneWidget);
+    await shot(tester, 'eid_day');
+  });
+
+  testWidgets('الأوضاع ورمضان في الإعدادات', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('رمضان والعيد'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'season_settings');
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الإجازة والسفر والإيقاف'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'modes');
+    await tester.tap(find.text('سفر'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'mode_travel');
+  });
+
+  testWidgets('وضع الإجازة في يومي', (tester) async {
+    final d = sample();
+    await pumpApp(
+      tester,
+      data: d.copyWith(
+        modes: const [
+          LifeMode(
+            id: 'v',
+            kind: ModeKind.vacation,
+            from: Day(2026, 11, 25),
+            to: Day(2026, 11, 30),
+          ),
+        ],
+      ),
+    );
+    expect(find.text('إجازة حتى ٣٠ نوفمبر'), findsOneWidget);
+    await shot(tester, 'vacation_day');
+  });
+
+  testWidgets('مشاركة مشاوير الأولاد', (tester) async {
+    final d = sample();
+    await pumpApp(
+      tester,
+      data: d.copyWith(
+        partner: const PartnerShare(
+          name: 'أم عيسى',
+          runs: {'kid:salma:drop': RunAssign(RunWho.partner)},
+        ),
+      ),
+    );
+    await tester.tap(find.text('روتيني'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('مشاركة مع الزوج/الزوجة'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'partner');
   });
 
   testWidgets('التهيئة', (tester) async {

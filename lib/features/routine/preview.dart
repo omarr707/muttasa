@@ -27,6 +27,7 @@ Future<bool> saveWithPreview(
       calc,
       today,
       rules: ctrl.rulesAfterSave(old, cfg, from: today, key: key),
+      holidays: ref.read(holidaysProvider),
     ),
   );
   final diffs = previewChanges(before, after, today);

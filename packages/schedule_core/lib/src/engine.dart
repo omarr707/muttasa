@@ -1,4 +1,6 @@
 import 'contacts.dart';
+import 'partner.dart';
+import 'season.dart';
 import 'day.dart';
 import 'format.dart';
 import 'prayer.dart';
@@ -20,6 +22,10 @@ class EngineInput {
     this.logs = const {},
     this.people = const [],
     this.contacts = const ContactsConfig(),
+    this.modes = const [],
+    this.holidays = const [],
+    this.partner = const PartnerShare(),
+    this.imported = const [],
     required this.prayers,
     required this.today,
     required this.nowMinute,
@@ -40,6 +46,18 @@ class EngineInput {
   /// قائمة التواصل وإعداداتها.
   final List<Person> people;
   final ContactsConfig contacts;
+
+  /// الأوضاع: إجازة، سفر، إيقاف مؤقت.
+  final List<LifeMode> modes;
+
+  /// المناسبات الوطنية والعطل لدولة المستخدم.
+  final List<Holiday> holidays;
+
+  /// مشاركة مشاوير الأولاد مع الزوج أو الزوجة.
+  final PartnerShare partner;
+
+  /// مواعيد التقويم المستوردة (قراءة فقط).
+  final List<ImportedEvent> imported;
 
   /// مواقيت اليوم. لمن اختار «بدون» دين تُستخدم مراسٍ محايدة.
   final DayPrayers Function(Day) prayers;
@@ -66,6 +84,10 @@ class EngineInput {
     logs: logs ?? this.logs,
     people: people,
     contacts: contacts,
+    modes: modes,
+    holidays: holidays,
+    partner: partner,
+    imported: imported,
     prayers: prayers,
     today: today ?? this.today,
     nowMinute: nowMinute ?? this.nowMinute,
@@ -96,6 +118,7 @@ class ScheduleEngine {
   final _baseCache = <Day, DayPlan>{};
   final _weekCache = <Day, Map<String, Set<Day>>>{};
   final _contactCache = <Day, Map<Day, List<Person>>>{};
+  final _ctxCache = <Day, DayContext>{};
 
   UserProfile get _p => input.profile;
 
@@ -130,12 +153,64 @@ class ScheduleEngine {
     return null;
   }
 
-  DayPrayers prayersFor(Day d) =>
-      _p.islam ? input.prayers(d) : DayPrayers.neutral;
+  /// سياق اليوم: الهجري، رمضان، العيد، الصيام، الوضع، العطلة.
+  DayContext contextFor(Day d) => _ctxCache.putIfAbsent(
+    d,
+    () => dayContext(
+      d,
+      profile: _p,
+      season: input.settings.season,
+      modes: input.modes,
+      holidays: input.holidays,
+    ),
+  );
+
+  SeasonSettings get _season => input.settings.season;
+
+  DayPrayers prayersFor(Day d) {
+    if (!_p.islam) return DayPrayers.neutral;
+    final pr = input.prayers(d);
+    final ctx = contextFor(d);
+    final method = ctx.mode?.calcMethod ?? _p.calcMethod;
+    // أم القرى: العشاء بعد المغرب بـ 90 دقيقة، ونجعلها 120 في رمضان.
+    if (ctx.ramadan && method == CalcMethod.ummAlQura) {
+      return DayPrayers(
+        fajr: pr.fajr,
+        sunrise: pr.sunrise,
+        dhuhr: pr.dhuhr,
+        asr: pr.asr,
+        maghrib: pr.maghrib,
+        isha: pr.maghrib + 120,
+      );
+    }
+    return pr;
+  }
 
   int get bedtime {
     final s = _p.sleep;
     return s >= _p.wake ? s : s + minutesPerDay;
+  }
+
+  /// وقت النوم ليوم بعينه: لرمضان وقت نوم خاص.
+  int bedtimeOn(Day d) {
+    if (!contextFor(d).ramadan) return bedtime;
+    final s = _season.ramadanSleep;
+    return s >= _p.wake ? s : s + minutesPerDay;
+  }
+
+  /// فترات الدوام ليوم [d] بعد المواسم والأوضاع. فارغة = لا دوام.
+  List<WorkPeriod> workPeriodsOn(Day d, WorkConfig work) {
+    final ctx = contextFor(d);
+    if (ctx.workOff) return const [];
+    final periods = work.days[d.weekday] ?? const [];
+    if (periods.isEmpty) return periods;
+    if (ctx.ramadan && _season.ramadanWork) {
+      // الوردية الليلية تبقى كما هي، والباقي يأخذ دوام رمضان.
+      final night = periods.where((p) => p.crossesMidnight).toList();
+      if (night.isNotEmpty) return night;
+      return [WorkPeriod(_season.ramadanWorkStart, _season.ramadanWorkEnd)];
+    }
+    return periods;
   }
 
   /// نهاية وردية الأمس إن عبرت منتصف الليل.
@@ -144,7 +219,7 @@ class ScheduleEngine {
     if (_override(y, 'work')?.off == true) return null;
     final work = _ruleOfKind<WorkConfig>(rulesOn(y));
     if (work == null) return null;
-    final periods = work.days[y.weekday] ?? const [];
+    final periods = workPeriodsOn(y, work);
     for (final p in periods) {
       if (p.crossesMidnight && p.end > 0) return p.end;
     }
@@ -165,9 +240,13 @@ class ScheduleEngine {
       if (cached != null) return cached;
     }
     final rules = rulesOn(d);
+    final ctx = contextFor(d);
     final pr = prayersFor(d);
-    final wake = _p.wake;
-    final bed = bedtime;
+    // في الصيام ينتهي النوم قبل الفجر بساعة على الأقل (للسحور).
+    final wake = ctx.fasting && pr.fajr - 60 < _p.wake
+        ? (pr.fajr - 60).clamp(0, minutesPerDay)
+        : _p.wake;
+    final bed = bedtimeOn(d);
     final busy = <Busy>[];
     final fixed = <PlanItem>[];
     final items = <PlanItem>[];
@@ -213,7 +292,7 @@ class ScheduleEngine {
     final work = _ruleOfKind<WorkConfig>(rules);
     var nightShiftTonight = false;
     if (work != null && !workOff) {
-      final periods = work.days[d.weekday] ?? const [];
+      final periods = workPeriodsOn(d, work);
       for (var i = 0; i < periods.length; i++) {
         final p = periods[i];
         final end = p.crossesMidnight ? minutesPerDay : p.end;
@@ -318,21 +397,113 @@ class ScheduleEngine {
           ),
         );
       }
+      if (ctx.ramadan && _season.taraweeh) {
+        fixed.add(
+          PlanItem(
+            key: 'prayer:taraweeh',
+            ruleKey: 'prayers',
+            kind: ItemKind.prayer,
+            title: 'صلاة التراويح',
+            subtitle: 'رمضان',
+            icon: 'prayer',
+            start: pr.isha + 20,
+            end: pr.isha + 80,
+            fixed: true,
+            counted: true,
+            track: prayersRule.track,
+            category: 'prayer',
+          ),
+        );
+      }
+      final eid = ctx.eid;
+      if (eid != null && eid.first) {
+        fixed.add(
+          PlanItem(
+            key: 'prayer:eid',
+            ruleKey: 'prayers',
+            kind: ItemKind.prayer,
+            title: 'صلاة العيد',
+            subtitle: eid.kind.label,
+            icon: 'prayer',
+            start: pr.sunrise + 20,
+            end: pr.sunrise + 60,
+            fixed: true,
+            counted: true,
+            track: prayersRule.track,
+            category: 'prayer',
+          ),
+        );
+      }
     }
 
-    // 4) الأولاد والحصص.
+    // الإفطار مع أذان المغرب في أيام الصيام: تمر وماء، خارج النسبة.
+    if (ctx.fasting) {
+      fixed.add(
+        PlanItem(
+          key: 'iftar',
+          kind: ItemKind.meal,
+          title: 'الإفطار',
+          subtitle: 'تمر وماء مع الأذان',
+          icon: 'meal',
+          start: pr.maghrib,
+          end: pr.maghrib + 8,
+          fixed: true,
+          counted: false,
+          track: TrackMode.auto,
+          category: 'meals',
+        ),
+      );
+    }
+
+    // مواعيد التقويم المستوردة: ثابتة وخارج النسبة.
+    final allDay = <String>[];
+    for (final e in input.imported.where((e) => e.date == d)) {
+      if (e.allDay) {
+        allDay.add(e.title);
+        continue;
+      }
+      fixed.add(
+        PlanItem(
+          key: e.itemKey,
+          kind: ItemKind.event,
+          title: e.title,
+          subtitle: e.calendar == null || e.calendar!.isEmpty
+              ? e.source
+              : '${e.source} · ${e.calendar}',
+          icon: 'event',
+          start: e.start!,
+          end: e.end! <= e.start! ? e.start! + 30 : e.end!,
+          fixed: true,
+          counted: false,
+          track: TrackMode.auto,
+          category: 'calendar',
+          source: e.source,
+        ),
+      );
+    }
+
+    // 4) الأولاد والحصص. مشاوير الشريك للعلم فقط: لا تحجز وقتًا ولا تُحسب.
+    final info = <PlanItem>[];
     for (final r in rules) {
       final c = r.config;
       if (c is KidConfig) {
+        if (ctx.schoolOff) continue;
         final kd = c.days[d.weekday];
         if (kd == null) continue;
-        if (kd.drop != null) {
-          fixed.add(_kidItem(r, c, 'drop', 'توصيل ${c.child}', kd.drop!));
-        }
-        if (kd.pick != null) {
-          fixed.add(_kidItem(r, c, 'pick', 'استلام ${c.child}', kd.pick!));
+        for (final (what, label, at) in [
+          ('drop', 'توصيل', kd.drop),
+          ('pick', 'استلام', kd.pick),
+        ]) {
+          if (at == null) continue;
+          final item = _kidItem(r, c, what, '$label ${c.child}', at);
+          if (_partnerRun(d, item.key)) {
+            info.add(_asPartner(item));
+          } else {
+            fixed.add(item);
+          }
         }
       } else if (c is ClassConfig) {
+        if (ctx.classesOff) continue;
         if (!c.weekdays.contains(d.weekday)) continue;
         fixed.add(
           PlanItem(
@@ -380,6 +551,7 @@ class ScheduleEngine {
     fixed.removeWhere(
       (i) => i.kind != ItemKind.work && _override(d, i.key)?.off == true,
     );
+    info.removeWhere((i) => _override(d, i.key)?.off == true);
 
     // 6) فحص الثابت.
     final conflicts = <Conflict>[];
@@ -395,6 +567,7 @@ class ScheduleEngine {
       busy.add(Busy(f.span, BusyKind.fixed, f.title, key: f.key));
     }
     items.addAll(fixed);
+    items.addAll(info);
 
     // 7) المرن بالترتيب.
     final queue = <_Flex>[];
@@ -438,8 +611,85 @@ class ScheduleEngine {
         ),
       );
     }
-    for (final r in flexRules.where((r) => r.kind == RuleKind.meal)) {
-      queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
+    final meals = flexRules.where((r) => r.kind == RuleKind.meal).toList();
+    if (ctx.fasting) {
+      // السحور والإفطار بدل الوجبات.
+      if (meals.isNotEmpty) {
+        queue.add(
+          _Flex(
+            key: 'meal:suhoor',
+            kind: ItemKind.meal,
+            title: 'السحور',
+            subtitle: 'قبل الفجر',
+            icon: 'meal',
+            duration: 25,
+            window: Window.any,
+            span: Span((pr.fajr - 60).clamp(0, minutesPerDay), pr.fajr - 5),
+            preferred: pr.fajr - 45,
+            track: TrackMode.confirm,
+            category: 'meals',
+          ),
+        );
+        queue.add(
+          _Flex(
+            key: 'meal:iftar',
+            kind: ItemKind.meal,
+            title: 'وجبة الإفطار',
+            subtitle: 'بعد صلاة المغرب',
+            icon: 'meal',
+            duration: 30,
+            window: Window.any,
+            span: Span(
+              pr.maghrib + 15,
+              (pr.maghrib + 120).clamp(0, minutesPerDay),
+            ),
+            preferred: pr.maghrib + 20,
+            track: TrackMode.confirm,
+            category: 'meals',
+          ),
+        );
+      }
+    } else {
+      for (final r in meals) {
+        queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
+      }
+    }
+    // العيد: معايدة الأهل في أول يوم، وزيارات العيد في باقي أيامه.
+    final eid = ctx.eid;
+    if (eid != null) {
+      queue.add(
+        _Flex(
+          key: 'eid:visits',
+          kind: ItemKind.contact,
+          title: eid.first ? 'معايدة الأهل' : 'زيارات العيد',
+          subtitle: '${eid.kind.label} · رسائل واتصالات وزيارات',
+          icon: 'gift',
+          duration: eid.first ? 120 : 90,
+          window: Window.any,
+          span: Span(pr.sunrise + 70, (22 * 60).clamp(0, bed)),
+          preferred: eid.first ? pr.sunrise + 80 : 16 * 60,
+          track: TrackMode.confirm,
+          category: 'contacts',
+        ),
+      );
+    }
+    // زكاة الفطر من 27 رمضان حتى تُسجّل.
+    if (ctx.ramadan && (ctx.hijri?.day ?? 0) >= 27 && !_zakatDoneBefore(d)) {
+      queue.add(
+        _Flex(
+          key: 'zakat',
+          kind: ItemKind.task,
+          title: 'زكاة الفطر',
+          subtitle: 'قبل صلاة العيد',
+          icon: 'coin',
+          duration: 10,
+          window: Window.any,
+          span: Span(10 * 60, 22 * 60),
+          preferred: 20 * 60,
+          track: TrackMode.confirm,
+          category: 'tasks',
+        ),
+      );
     }
     for (final o in todaysOneOffs.where(
       (o) => o.start == null && o.kind != OneOffKind.reminder,
@@ -507,6 +757,31 @@ class ScheduleEngine {
       );
     }
 
+    // الإيقاف المؤقت: يبقى الثابت والوجبات فقط.
+    if (ctx.paused) queue.removeWhere((f) => f.kind != ItemKind.meal);
+    // في الصيام: الاقتراحات (والمشي والرياضة في رمضان) بعد الإفطار.
+    if (ctx.fasting) {
+      final after = Span(
+        pr.maghrib + 30,
+        bed.clamp(pr.maghrib + 30, minutesPerDay),
+      );
+      for (final f in queue) {
+        final suggestion = f.isExtra && f.category == 'contacts';
+        final active =
+            ctx.ramadan &&
+            _season.lateOutings &&
+            (f.ruleKey == 'habit:walk' ||
+                f.ruleKey == 'habit:sport' ||
+                f.icon == 'walk' ||
+                f.icon == 'sport');
+        if (!suggestion && !active) continue;
+        final base = f.span ?? windowSpan(f.window, pr, dayWake, bed);
+        final s0 = base.start > after.start ? base.start : after.start;
+        f.span = Span(s0, after.end > s0 ? after.end : s0);
+        f.window = Window.any;
+      }
+    }
+
     // المقفل أولًا (تعديل اليوم، ثم الوقت المخطط المسجّل)، ثم الباقي بالترتيب.
     for (final f in queue) {
       final ov = _override(d, f.key);
@@ -549,7 +824,8 @@ class ScheduleEngine {
       }
       final w = f.span ?? windowSpan(f.window, pr, dayWake, bed);
       var t = _search(busy, f.duration, w, f.preferred);
-      if (t == null && f.span != null) continue; // اقتراح: يسكت إن ما لقى وقت.
+      // الاقتراح يسكت إن ما لقى وقت، فالأقل أفضل من الحشو.
+      if (t == null && f.span != null && f.isExtra) continue;
       if (t == null && f.window != Window.any) {
         t = _search(
           busy,
@@ -620,7 +896,16 @@ class ScheduleEngine {
     final reminders = _ruleOfKind<RemindersConfig>(rules);
     if (reminders != null) {
       lines.addAll(
-        _reminderLines(d, reminders, withStatus, busy, pr, dayWake, bed),
+        _reminderLines(
+          d,
+          reminders,
+          withStatus,
+          busy,
+          pr,
+          dayWake,
+          bed,
+          fasting: ctx.fasting,
+        ),
       );
     }
     if (bed < minutesPerDay && !nightShiftTonight) {
@@ -646,6 +931,8 @@ class ScheduleEngine {
       wake: dayWake,
       bedtime: bed,
       workOff: workOff,
+      context: ctx,
+      allDay: allDay,
     );
     if (!withWeekly) _baseCache[d] = plan;
     return plan;
@@ -658,6 +945,8 @@ class ScheduleEngine {
       return false;
     }
     if (a.kind == ItemKind.work && b.kind == ItemKind.work) return false;
+    // الإفطار مع الأذان قبل صلاة المغرب: ليس تعارضًا.
+    if (a.key == 'iftar' || b.key == 'iftar') return false;
     return a.span.overlaps(b.span);
   }
 
@@ -692,6 +981,37 @@ class ScheduleEngine {
         track: TrackMode.confirm,
         category: 'fixed',
       );
+
+  /// هل المشوار على الشريك اليوم؟ تبديل اليوم يغلب الإعداد الدائم.
+  bool _partnerRun(Day d, String key) {
+    if (!input.partner.active) return false;
+    final who = _override(d, key)?.who;
+    if (who != null) return who == 'partner';
+    return input.partner.partnerOn(key, d);
+  }
+
+  PlanItem _asPartner(PlanItem i) => PlanItem(
+    key: i.key,
+    ruleKey: i.ruleKey,
+    kind: i.kind,
+    title: i.title,
+    subtitle: 'على ${input.partner.name} اليوم',
+    icon: i.icon,
+    start: i.start,
+    end: i.end,
+    fixed: true,
+    counted: false,
+    track: TrackMode.auto,
+    category: i.category,
+    partner: true,
+  );
+
+  bool _zakatDoneBefore(Day d) {
+    for (var x = d.prev; d.difference(x) <= 4; x = x.prev) {
+      if (_log(x, 'zakat')?.status == ItemStatus.done) return true;
+    }
+    return false;
+  }
 
   PlanItem _oneOffItem(OneOff o, int start) {
     final kind = switch (o.kind) {
@@ -874,6 +1194,8 @@ class ScheduleEngine {
       log: log,
       subs: i.subs,
       personId: i.personId,
+      partner: i.partner,
+      source: i.source,
     );
   }
 
@@ -1160,22 +1482,44 @@ class ScheduleEngine {
     List<Busy> busy,
     DayPrayers pr,
     int wake,
-    int bed,
-  ) {
+    int bed, {
+    bool fasting = false,
+  }) {
     final out = <ReminderLine>[];
     final end = bed.clamp(0, minutesPerDay);
     if (c.water && c.cups > 0) {
+      // في الصيام: الماء بعد الإفطار فقط.
+      final from = fasting ? pr.maghrib : wake;
       // مرتبطة بالوجبات والاستراحة، ثم توزيع على الفراغات الكبيرة. لا «كوب كل ساعة».
-      final anchors = <int>{wake + 30};
+      final anchors = <int>{fasting ? pr.maghrib + 20 : wake + 30};
       for (final i in items) {
         if (i.kind == ItemKind.meal) anchors.add(i.end + 10);
-        if (i.workBreak != null) anchors.add(i.workBreak!.start + 5);
+        if (i.workBreak != null && !fasting) {
+          anchors.add(i.workBreak!.start + 5);
+        }
       }
-      var times = anchors.where((m) => m >= wake && m < end - 30).toList()
-        ..sort();
-      while (times.length < c.cups && times.length < 16) {
+      var times = <int>[];
+      if (fasting) {
+        // في الصيام: بعد الإفطار، بعد العشاء، قبل النوم، ومع السحور.
+        times = [
+          pr.maghrib + 20,
+          pr.maghrib + 90,
+          pr.isha + 100,
+          end - 45,
+          if (pr.fajr - 40 > wake) pr.fajr - 40,
+        ].map((m) => (m ~/ 5) * 5).toSet().toList()..sort();
+      }
+      for (final m
+          in (anchors
+              .where((m) => !fasting && m >= from && m < end - 30)
+              .toList()
+            ..sort())) {
+        // مرسيان متقاربان يصيران تذكيرًا واحدًا.
+        if (times.isEmpty || m - times.last >= 20) times.add(m);
+      }
+      while (!fasting && times.length < c.cups && times.length < 16) {
         // أكبر فجوة بين المراسي.
-        final pts = [wake, ...times, end - 30];
+        final pts = [from, ...times, end - 30];
         var bestGap = 0, bestAt = -1;
         for (var i = 1; i < pts.length; i++) {
           final g = pts[i] - pts[i - 1];
@@ -1184,7 +1528,7 @@ class ScheduleEngine {
             bestAt = pts[i - 1] + g ~/ 2;
           }
         }
-        if (bestGap < 40) break;
+        if (bestGap < (fasting ? 25 : 40)) break;
         times.add((bestAt ~/ 5) * 5);
         times.sort();
       }
@@ -1282,7 +1626,7 @@ class _Flex {
   final String? subtitle;
   final String icon;
   final int duration;
-  final Window window;
+  Window window;
   final int? preferred;
   int? lockedStart;
   final TrackMode track;
@@ -1297,7 +1641,7 @@ class _Flex {
   final String? oneOffId;
 
   /// نافذة مخصصة (اقتراحات التواصل). بدونها تُستخدم [window].
-  final Span? span;
+  Span? span;
   final String? personId;
   bool dropped = false;
   bool manual = false;
