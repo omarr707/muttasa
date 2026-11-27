@@ -17,6 +17,7 @@ enum ItemKind {
   period,
   event,
   contact,
+  savings,
 }
 
 /// عنصر واحد في خطة اليوم.

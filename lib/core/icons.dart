@@ -32,6 +32,9 @@ IconData iconFor(String name) => switch (name) {
   'stand' => Icons.accessibility_new,
   'breathe' => Icons.air,
   'bell' => Icons.notifications_none,
+  'coin' => Icons.savings_outlined,
+  'flag' => Icons.flag_outlined,
+  'visit' => Icons.home_outlined,
   _ => Icons.star_outline,
 };
 

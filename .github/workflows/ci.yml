@@ -63,7 +63,7 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: preview-${{ github.ref_name == 'main' && 'main' || 'phase1' }}
+          tag_name: preview-${{ github.ref_name == 'main' && 'main' || (github.ref_name == 'claude/project-thread-m95wc3' && 'phase1' || 'phase2') }}
           name: مُتَّسَع — نسخة تجريبية (${{ github.ref_name }})
           prerelease: true
           target_commitish: ${{ github.sha }}

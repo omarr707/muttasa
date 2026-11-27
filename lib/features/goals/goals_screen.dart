@@ -9,8 +9,10 @@ import '../../state/providers.dart';
 import '../routine/labels.dart';
 import '../routine/preview.dart';
 import '../routine/rule_editors.dart';
+import 'amount_sheet.dart';
+import 'goal_editor.dart';
 
-/// «أهدافي»: العادات وتقدمها في الأسبوع. الأهداف بالنتيجة والموعد في المرحلة الثانية.
+/// «أهدافي»: الأهداف بالنتيجة والموعد (الحالة، المطلوب، التحذير)، ثم العادات.
 class GoalsScreen extends ConsumerWidget {
   const GoalsScreen({super.key});
 
@@ -19,6 +21,8 @@ class GoalsScreen extends ConsumerWidget {
     final c = context.c;
     final engine = ref.watch(engineProvider);
     final today = ref.watch(todayProvider);
+    final userGoals = ref.watch(appDataProvider.select((d) => d.goals));
+    final targets = [...engine.derivedGoals(userGoals), ...userGoals];
     final habits = engine
         .rulesOn(today, includePaused: true)
         .where(
@@ -47,22 +51,20 @@ class GoalsScreen extends ConsumerWidget {
               style: TextStyle(color: c.ink2),
             ),
             const SectionTitle('الأهداف'),
-            MCard(
-              dashed: true,
-              color: c.bg,
-              border: c.accent,
-              child: Row(
-                children: [
-                  Icon(Icons.flag_outlined, color: c.muted),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'الأهداف بالنتيجة والموعد، والختمة والادخار، تجي مع المرحلة الثانية. الحين تابع عاداتك تحت.',
-                      style: TextStyle(color: c.ink2, fontSize: 12.5),
-                    ),
-                  ),
-                ],
+            if (targets.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  nums('ما عندك هدف بموعد. مثلًا: «أقرأ 12 كتاب هالسنة».'),
+                  style: TextStyle(color: c.muted),
+                ),
               ),
+            for (final g in targets)
+              _GoalCard(status: engine.goalStatus(g), today: today),
+            PillButton(
+              label: '+ هدف جديد',
+              expand: true,
+              onPressed: () => openGoalEditor(context),
             ),
             const SectionTitle('العادات'),
             if (habits.isEmpty)
@@ -71,7 +73,15 @@ class GoalsScreen extends ConsumerWidget {
                 style: TextStyle(color: c.muted),
               ),
             for (final r in habits)
-              _HabitCard(rule: r, engine: engine, today: today),
+              _HabitCard(
+                rule: r,
+                engine: engine,
+                today: today,
+                feeds: targets
+                    .where((g) => g.linkKey == r.key)
+                    .map((g) => g.title)
+                    .toList(),
+              ),
           ],
         ),
       ),
@@ -84,10 +94,14 @@ class _HabitCard extends ConsumerWidget {
     required this.rule,
     required this.engine,
     required this.today,
+    this.feeds = const [],
   });
   final Rule rule;
   final ScheduleEngine engine;
   final Day today;
+
+  /// الأهداف اللي تغذيها هذه العادة.
+  final List<String> feeds;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -222,6 +236,14 @@ class _HabitCard extends ConsumerWidget {
                   ),
               ],
             ),
+            if (feeds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  nums('تغذي: ${feeds.join('، ')}'),
+                  style: TextStyle(color: c.ink2, fontSize: 12.5),
+                ),
+              ),
             if (w.unplaced > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -262,6 +284,236 @@ class _HabitCard extends ConsumerWidget {
                 );
               },
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// بطاقة هدف: الحالة، شريط التقدم مع علامة «المفروض»، والإجراء.
+class _GoalCard extends ConsumerWidget {
+  const _GoalCard({required this.status, required this.today});
+  final GoalStatus status;
+  final Day today;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    final g = status.goal;
+    final ctrl = ref.read(appDataProvider.notifier);
+    final engine = ref.watch(engineProvider);
+    final currency = ref.watch(
+      appDataProvider.select((d) => d.profile?.currency ?? 'ريال'),
+    );
+    final unit = g.unitLabel(currency);
+    final feeds = switch (g.metric) {
+      GoalMetric.khatma => 'ورد القرآن',
+      GoalMetric.money =>
+        engine
+                .rulesOn(today)
+                .where((r) => r.config is SavingsConfig)
+                .map((r) => 'يوم الراتب ${(r.config as SavingsConfig).payDay}')
+                .firstOrNull ??
+            '',
+      _ =>
+        engine
+                .rulesOn(today, includePaused: true)
+                .where((r) => r.key == g.linkKey && r.config is FlexConfig)
+                .map((r) => (r.config as FlexConfig).title)
+                .firstOrNull ??
+            '',
+    };
+    final sub = [
+      g.due == null ? 'بدون موعد' : fmtDue(g.due!, today),
+      if (feeds.isNotEmpty) 'تغذيه: $feeds',
+    ].join(' · ');
+    final st = status.state;
+    final (chipBg, chipFg) = st.good
+        ? (c.goodSoft, c.good)
+        : st.late
+        ? (c.amberSoft, c.amber)
+        : (c.sunk, c.ink2);
+
+    Future<void> edit() async {
+      if (!g.derived) return openGoalEditor(context, goal: g);
+      final rule = engine
+          .rulesOn(today, includePaused: true)
+          .where((r) => r.key == g.linkKey)
+          .firstOrNull;
+      if (rule == null) return;
+      final next = await editRuleConfig(context, rule.config);
+      if (next != null && context.mounted) {
+        await saveWithPreview(context, ref, rule, next);
+      }
+    }
+
+    Widget? action;
+    if (g.metric.manual && !g.derived) {
+      action = SmallButton(
+        label: nums('+1 $unit'),
+        primary: true,
+        onTap: () async {
+          await ctrl.addGoalEntry(g.id, 1);
+          if (context.mounted) {
+            toast(
+              context,
+              nums('+1 $unit في «${g.title}»'),
+              actionLabel: 'تراجع',
+              onAction: () => ctrl.addGoalEntry(g.id, -1),
+            );
+          }
+        },
+      );
+    } else if (g.metric == GoalMetric.money) {
+      action = SmallButton(
+        label: 'سجّل مبلغ',
+        primary: true,
+        onTap: () async {
+          final planned =
+              engine
+                  .rulesOn(today)
+                  .where((r) => r.config is SavingsConfig)
+                  .map((r) => (r.config as SavingsConfig).monthly)
+                  .firstOrNull ??
+              500;
+          final amount = await showAmountSheet(
+            context,
+            planned: planned,
+            currency: currency,
+          );
+          if (amount == null) return;
+          await ctrl.logSaving(amount);
+          if (context.mounted) {
+            toast(context, nums('سجّلنا ${fmtThousands(amount)} $currency'));
+          }
+        },
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: MCard(
+        onTap: edit,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconSquare(iconFor(g.metric.icon)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nums(g.title), style: T.cardTitle),
+                      Text(
+                        nums(sub),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: T.meta.copyWith(color: c.muted),
+                      ),
+                    ],
+                  ),
+                ),
+                if (st != GoalState.noDue)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: chipBg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      st.label,
+                      style: T.label.copyWith(color: chipFg, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _ProgressBar(
+              ratio: status.ratio,
+              expected: status.expected == null || g.target == 0
+                  ? null
+                  : (status.expected! / g.target).clamp(0, 1).toDouble(),
+              color: st.good ? c.good : c.accent,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: nums(fmtThousands(status.value)),
+                          style: T.stat.copyWith(fontSize: 17),
+                        ),
+                        TextSpan(
+                          text: nums(' من ${fmtThousands(g.target)} $unit'),
+                          style: TextStyle(color: c.ink2, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                ?action,
+                IconButton(
+                  tooltip: 'تعديل ${g.title}',
+                  icon: Icon(Icons.edit_outlined, size: 20, color: c.muted),
+                  onPressed: edit,
+                ),
+              ],
+            ),
+            Text(
+              nums(status.message),
+              style: T.meta.copyWith(
+                color: st.late ? c.amber : c.ink2,
+                fontSize: 12.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// شريط تقدم مع علامة رفيعة عند «المفروض تكون الحين».
+class _ProgressBar extends StatelessWidget {
+  const _ProgressBar({required this.ratio, this.expected, required this.color});
+  final double ratio;
+  final double? expected;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return SizedBox(
+      height: 12,
+      child: LayoutBuilder(
+        builder: (context, box) => Stack(
+          alignment: AlignmentDirectional.centerStart,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 8,
+                backgroundColor: c.line,
+                color: color,
+              ),
+            ),
+            if (expected != null)
+              PositionedDirectional(
+                start: (box.maxWidth * expected!).clamp(0, box.maxWidth - 2),
+                top: 0,
+                bottom: 0,
+                child: Container(width: 2, color: c.ink2),
+              ),
           ],
         ),
       ),

@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../services/contact_actions.dart';
 import '../../state/providers.dart';
+import '../goals/amount_sheet.dart';
 import 'item_sheet.dart';
 import 'water_sheet.dart';
 
@@ -92,7 +93,8 @@ class ItemCard extends ConsumerWidget {
         !off &&
         i.track != TrackMode.auto &&
         (done || !upcoming || !i.fixed);
-    final contact = i.kind == ItemKind.contact && i.icon != 'gift';
+    final contact =
+        i.kind == ItemKind.contact && i.icon != 'gift' && i.icon != 'visit';
     if (contact && !done && !isFuture && !off) {
       final person = ref
           .watch(appDataProvider.select((d) => d.people))
@@ -122,6 +124,12 @@ class ItemCard extends ConsumerWidget {
             onAction: () => ctrl.markDone(date, i),
           );
         },
+      );
+    } else if (i.kind == ItemKind.savings && !done && !isFuture && !off) {
+      action = SmallButton(
+        label: 'تم الادخار',
+        primary: true,
+        onTap: () => logSavingFromCard(context, ref, i, date),
       );
     } else if (canCheck) {
       action = CheckCircle(
@@ -735,4 +743,36 @@ class _Dashes extends StatelessWidget {
       );
     },
   );
+}
+
+/// «تم الادخار»: يسأل المبلغ ثم يسجّله على بطاقة يوم الراتب.
+Future<void> logSavingFromCard(
+  BuildContext context,
+  WidgetRef ref,
+  PlanItem i,
+  Day date,
+) async {
+  final engine = ref.read(engineProvider);
+  final cfg = engine
+      .rulesOn(date)
+      .map((r) => r.config)
+      .whereType<SavingsConfig>()
+      .firstOrNull;
+  final currency = ref.read(appDataProvider).profile?.currency ?? 'ريال';
+  final amount = await showAmountSheet(
+    context,
+    planned: cfg?.monthly ?? 500,
+    currency: currency,
+  );
+  if (amount == null) return;
+  final ctrl = ref.read(appDataProvider.notifier);
+  await ctrl.markDone(date, i, value: amount);
+  if (context.mounted) {
+    toast(
+      context,
+      nums('سجّلنا ${fmtThousands(amount)} $currency ✓'),
+      actionLabel: 'تراجع',
+      onAction: () => ctrl.undo(date, i.key),
+    );
+  }
 }

@@ -18,6 +18,7 @@ class AppData {
     this.meta = const {},
     this.people = const [],
     this.contacts = const ContactsConfig(),
+    this.goals = const [],
   });
 
   final UserProfile? profile;
@@ -30,6 +31,9 @@ class AppData {
   final Map<String, String> meta;
   final List<Person> people;
   final ContactsConfig contacts;
+
+  /// الأهداف بالنتيجة والموعد (التي أنشأها المستخدم).
+  final List<Goal> goals;
 
   bool get onboarded => profile != null;
 
@@ -44,6 +48,7 @@ class AppData {
     Map<String, String>? meta,
     List<Person>? people,
     ContactsConfig? contacts,
+    List<Goal>? goals,
   }) => AppData(
     profile: profile ?? this.profile,
     settings: settings ?? this.settings,
@@ -55,6 +60,7 @@ class AppData {
     meta: meta ?? this.meta,
     people: people ?? this.people,
     contacts: contacts ?? this.contacts,
+    goals: goals ?? this.goals,
   );
 }
 
@@ -129,8 +135,17 @@ class Repository {
       contacts: kv['contacts'] == null
           ? const ContactsConfig()
           : ContactsConfig.fromJson(_decode(kv['contacts']!)),
+      goals: kv['goals'] == null
+          ? const []
+          : _goals(jsonDecode(kv['goals']!) as List),
     );
   }
+
+  static List<Goal> _goals(List l) =>
+      l.map((e) => Goal.fromJson((e as Map).cast<String, Object?>())).toList();
+
+  Future<void> saveGoals(List<Goal> g) =>
+      setKv('goals', jsonEncode(g.map((e) => e.toJson()).toList()));
 
   static List<Person> _people(List l) => l
       .map((e) => Person.fromJson((e as Map).cast<String, Object?>()))
@@ -277,6 +292,7 @@ class Repository {
     'meta': d.meta,
     'people': d.people.map((p) => p.toJson()).toList(),
     'contacts': d.contacts.toJson(),
+    'goals': d.goals.map((g) => g.toJson()).toList(),
   };
 
   /// يقرأ النسخة ويتحقق منها دون أن يكتب شيئًا.
@@ -318,6 +334,7 @@ class Repository {
           : ContactsConfig.fromJson(
               (j['contacts']! as Map).cast<String, Object?>(),
             ),
+      goals: _goals((j['goals'] as List?) ?? const []),
     );
   }
 
@@ -329,6 +346,7 @@ class Repository {
       await saveSettings(d.settings);
       await savePeople(d.people);
       await saveContacts(d.contacts);
+      await saveGoals(d.goals);
       for (final e in d.meta.entries) {
         await setMeta(e.key, e.value);
       }

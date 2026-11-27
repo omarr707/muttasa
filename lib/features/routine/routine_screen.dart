@@ -205,6 +205,7 @@ class _RoutineScreenState extends ConsumerState<RoutineScreen> {
       'meals': 'الوجبات',
       'habits': 'العادات',
       'light': 'خفيفة',
+      'money': 'المال',
     };
     return [
       const SizedBox(height: 8),

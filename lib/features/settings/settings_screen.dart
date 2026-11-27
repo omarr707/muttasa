@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../../data/defaults.dart';
 import '../../services/backup.dart';
+import '../../services/location.dart';
 import '../../services/notifications.dart';
 import '../../state/providers.dart';
 import '../routine/labels.dart';
@@ -781,6 +782,26 @@ Future<void> pickCity(
         child: ListView(
           shrinkWrap: true,
           children: [
+            ListTile(
+              leading: Icon(Icons.my_location, color: ctx.c.accent),
+              title: const Text('استخدم موقعي'),
+              subtitle: const Text('مرة واحدة، ولا نتتبّع موقعك'),
+              onTap: () async {
+                try {
+                  final f = await locateMe(defaults);
+                  if (ctx.mounted) Navigator.pop(ctx, (f.country, f.city));
+                } catch (e) {
+                  if (ctx.mounted) {
+                    toast(
+                      ctx,
+                      e is LocationException
+                          ? e.message
+                          : 'ما قدرنا نحدد موقعك الحين',
+                    );
+                  }
+                }
+              },
+            ),
             for (final co in defaults.countries) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),

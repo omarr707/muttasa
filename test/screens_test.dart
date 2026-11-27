@@ -82,9 +82,23 @@ AppData sample() {
         validFrom: from,
         config: PrayersConfig(sunnah: ['fajr', 'dhuhr', 'maghrib', 'isha']),
       ),
+      Rule(
+        id: 'quran:wird',
+        key: 'quran:wird',
+        validFrom: from,
+        config:
+            (libraryEntries.firstWhere((e) => e.key == 'quran:wird').build()
+                    as FlexConfig)
+                .copyWith(khatmaBy: const Day(2027, 1, 31)),
+      ),
+      const Rule(
+        id: 'savings',
+        key: 'savings',
+        validFrom: from,
+        config: SavingsConfig(payDay: 27, monthly: 1000, target: 12000),
+      ),
       for (final k in [
         'adhkar',
-        'quran:wird',
         'meal:breakfast',
         'meal:dinner',
         'habit:walk',
@@ -121,6 +135,7 @@ AppData sample() {
       ),
     ],
     logs: {
+      ...pastLogs(),
       recordKey(d, 'prayer:fajr'): const ItemLog(
         date: d,
         itemKey: 'prayer:fajr',
@@ -178,7 +193,81 @@ AppData sample() {
       ),
     ],
     contacts: const ContactsConfig(enabled: true),
+    goals: const [
+      Goal(
+        id: 'books',
+        title: 'أقرأ 12 كتاب هالسنة',
+        metric: GoalMetric.books,
+        target: 12,
+        start: Day(2026, 11, 1),
+        due: Day(2027, 10, 31),
+        linkKey: 'habit:read',
+        entries: [GoalEntry(Day(2026, 11, 15), 1)],
+      ),
+      Goal(
+        id: 'walk',
+        title: 'أمشي 40 مرة',
+        metric: GoalMetric.sessions,
+        target: 40,
+        start: Day(2026, 11, 1),
+        due: Day(2027, 1, 31),
+        linkKey: 'habit:walk',
+      ),
+    ],
   );
+}
+
+/// سجل أيام نوفمبر الماضية: صلوات بنسب متفاوتة، صفحات، مشي، وادخار.
+Map<String, ItemLog> pastLogs() {
+  final out = <String, ItemLog>{};
+  void put(Day d, String key, {int? v, int? v2}) =>
+      out[recordKey(d, key)] = ItemLog(
+        date: d,
+        itemKey: key,
+        status: ItemStatus.done,
+        value: v,
+        value2: v2,
+      );
+  var page = 0;
+  for (
+    var d = const Day(2026, 11, 1);
+    d.isBefore(const Day(2026, 11, 26));
+    d = d.next
+  ) {
+    final n = d.day % 5; // تفاوت بين الأيام
+    final prayers = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+    for (
+      var i = 0;
+      i <
+          5 -
+              (n == 0
+                  ? 3
+                  : n == 3
+                  ? 1
+                  : 0);
+      i++
+    ) {
+      put(
+        d,
+        'prayer:${d.weekday == DateTime.friday && prayers[i] == 'dhuhr' ? 'jumuah' : prayers[i]}',
+      );
+    }
+    if (n != 0) {
+      put(d, 'adhkar:morning');
+      put(d, 'quran:wird', v: page + 1, v2: page + 8);
+      page += 8;
+    }
+    if (d.weekday == DateTime.saturday || d.weekday == DateTime.tuesday) {
+      put(d, 'habit:walk');
+    }
+  }
+  out[recordKey(const Day(2026, 11, 1), 'savings:manual:a')] = const ItemLog(
+    date: Day(2026, 11, 1),
+    itemKey: 'savings:manual:a',
+    status: ItemStatus.done,
+    value: 1500,
+  );
+  return out;
 }
 
 void main() {
@@ -300,6 +389,55 @@ void main() {
     find.byType(MaterialApp),
     matchesGoldenFile('goldens/$name.png'),
   );
+
+  testWidgets('الأهداف والتقرير والادخار', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('أهدافي'));
+    await tester.pumpAndSettle();
+    expect(find.text('ختمة القرآن'), findsOneWidget);
+    expect(find.text('الادخار'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -420));
+    await tester.pumpAndSettle();
+    await shot(tester, 'goals_targets');
+    await tester.tap(find.text('+ هدف جديد'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('أدّخر'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'goal_editor');
+    await tester.tap(find.byType(CloseButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('يومي'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الإحصائيات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('شهري'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'report_month');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    await shot(tester, 'report_month2');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('سنوي'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'report_year');
+  });
+
+  testWidgets('بطاقة يوم الراتب', (tester) async {
+    await pumpApp(tester);
+    // بكرة 27: يوم الراتب.
+    final ctx = tester.element(find.byType(CustomScrollView));
+    final container = ProviderScope.containerOf(ctx);
+    container.read(selectedDayProvider.notifier).set(const Day(2026, 11, 27));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('ادّخر من راتبك'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await shot(tester, 'savings_card');
+  });
 
   testWidgets('فاتت، الماء، البطاقة', (tester) async {
     await pumpApp(tester);

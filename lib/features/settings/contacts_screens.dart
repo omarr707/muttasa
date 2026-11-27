@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:schedule_core/schedule_core.dart';
 
@@ -344,6 +345,30 @@ class _PersonEditPageState extends ConsumerState<PersonEditPage> {
     super.dispose();
   }
 
+  /// منتقي النظام: المستخدم يختار شخصًا واحدًا، فننسخ اسمه ورقمه فقط.
+  /// لا نقرأ دفتر العناوين ولا نطلب إذن جهات الاتصال على أندرويد.
+  Future<void> _pickFromPhone() async {
+    try {
+      final picked = await FlutterNativeContactPicker().selectPhoneNumber();
+      if (picked == null || !mounted) return;
+      final phone =
+          picked.selectedPhoneNumber ??
+          ((picked.phoneNumbers?.isNotEmpty ?? false)
+              ? picked.phoneNumbers!.first
+              : null);
+      setState(() {
+        if ((picked.fullName ?? '').trim().isNotEmpty) {
+          _name.text = picked.fullName!.trim();
+        }
+        if (phone != null) {
+          _phone.text = phone.replaceAll(RegExp(r'[^0-9+ ]'), '').trim();
+        }
+      });
+    } catch (_) {
+      if (mounted) toast(context, 'ما قدرنا نفتح جهات الاتصال، اكتبه بنفسك');
+    }
+  }
+
   Future<void> _addOccasion(OccasionKind kind) async {
     final now = DateTime.now();
     final d = await showDatePicker(
@@ -427,6 +452,14 @@ class _PersonEditPageState extends ConsumerState<PersonEditPage> {
             Text(
               'نحفظ الاسم والرقم فقط، على جهازك.',
               style: T.meta.copyWith(color: c.muted),
+            ),
+            const SizedBox(height: 12),
+            PillButton(
+              label: 'اختر من جهات الاتصال',
+              icon: Icons.contacts_outlined,
+              soft: true,
+              expand: true,
+              onPressed: _pickFromPhone,
             ),
             label('الاسم'),
             TextField(

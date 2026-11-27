@@ -41,6 +41,7 @@ enum RuleKind {
   kid,
   klass,
   reminders,
+  savings,
 }
 
 /// قاعدة مؤرّخة. «من اليوم فصاعدًا» يغلق الصف القديم ويفتح صفًا جديدًا
@@ -150,6 +151,8 @@ sealed class RuleConfig {
         return ClassConfig.fromJson(j);
       case RuleKind.reminders:
         return RemindersConfig.fromJson(j);
+      case RuleKind.savings:
+        return SavingsConfig.fromJson(j);
     }
   }
 }
@@ -247,6 +250,7 @@ class FlexConfig extends RuleConfig {
     this.pages,
     this.book,
     this.startPage,
+    this.khatmaBy,
   });
 
   @override
@@ -277,6 +281,12 @@ class FlexConfig extends RuleConfig {
   final String? book;
   final int? startPage;
 
+  /// ختمة: آخر يوم للختم. صفحات اليوم تُحسب من المتبقي ÷ أيام القراءة الباقية،
+  /// وتتعدل مع كل تسجيل. null = ورد ثابت بعدد [pages].
+  final Day? khatmaBy;
+
+  bool get isKhatma => khatmaBy != null;
+
   Window windowFor(int session) => windows.isEmpty
       ? Window.any
       : windows[session.clamp(0, windows.length - 1)];
@@ -297,6 +307,8 @@ class FlexConfig extends RuleConfig {
     int? pages,
     String? book,
     int? startPage,
+    Day? khatmaBy,
+    bool clearKhatma = false,
   }) => FlexConfig(
     kind: kind,
     title: title ?? this.title,
@@ -314,6 +326,7 @@ class FlexConfig extends RuleConfig {
     pages: pages ?? this.pages,
     book: book ?? this.book,
     startPage: startPage ?? this.startPage,
+    khatmaBy: clearKhatma ? null : (khatmaBy ?? this.khatmaBy),
   );
 
   @override
@@ -334,6 +347,7 @@ class FlexConfig extends RuleConfig {
     'pages': pages,
     'book': book,
     'startPage': startPage,
+    if (khatmaBy != null) 'khatmaBy': khatmaBy!.key,
   };
 
   factory FlexConfig.fromJson(Map<String, Object?> j) => FlexConfig(
@@ -357,6 +371,9 @@ class FlexConfig extends RuleConfig {
     pages: j['pages'] as int?,
     book: j['book'] as String?,
     startPage: j['startPage'] as int?,
+    khatmaBy: j['khatmaBy'] == null
+        ? null
+        : Day.parse(j['khatmaBy']! as String),
   );
 }
 
@@ -548,5 +565,66 @@ class RemindersConfig extends RuleConfig {
     cups: (j['cups'] as int?) ?? 8,
     stand: (j['stand'] as bool?) ?? true,
     breathe: (j['breathe'] as bool?) ?? true,
+  );
+}
+
+/// الادخار: تذكير يوم الراتب بمبلغ شهري، وهدف اختياري. إدخال يدوي فقط.
+class SavingsConfig extends RuleConfig {
+  const SavingsConfig({
+    this.payDay = 27,
+    this.monthly = 500,
+    this.target,
+    this.targetBy,
+  });
+
+  /// يوم الراتب من الشهر (1..31). الشهر الأقصر يأخذ آخر يوم فيه.
+  final int payDay;
+
+  /// المبلغ المخطط كل شهر.
+  final int monthly;
+
+  /// هدف الادخار (اختياري) وموعده.
+  final int? target;
+  final Day? targetBy;
+
+  @override
+  RuleKind get kind => RuleKind.savings;
+
+  /// هل [d] يوم الراتب؟
+  bool isPayDay(Day d) {
+    final last = Day(d.year, d.month + 1, 1).add(-1).day;
+    return d.day == (payDay > last ? last : payDay);
+  }
+
+  SavingsConfig copyWith({
+    int? payDay,
+    int? monthly,
+    int? target,
+    bool clearTarget = false,
+    Day? targetBy,
+    bool clearTargetBy = false,
+  }) => SavingsConfig(
+    payDay: payDay ?? this.payDay,
+    monthly: monthly ?? this.monthly,
+    target: clearTarget ? null : (target ?? this.target),
+    targetBy: clearTargetBy ? null : (targetBy ?? this.targetBy),
+  );
+
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': kind.name,
+    'payDay': payDay,
+    'monthly': monthly,
+    'target': target,
+    'targetBy': targetBy?.key,
+  };
+
+  factory SavingsConfig.fromJson(Map<String, Object?> j) => SavingsConfig(
+    payDay: (j['payDay'] as int?) ?? 27,
+    monthly: (j['monthly'] as int?) ?? 500,
+    target: j['target'] as int?,
+    targetBy: j['targetBy'] == null
+        ? null
+        : Day.parse(j['targetBy']! as String),
   );
 }

@@ -84,6 +84,17 @@ void main() {
             status: ItemStatus.done,
           ),
         },
+        goals: const [
+          Goal(
+            id: 'g1',
+            title: 'أحفظ 30 حديث',
+            metric: GoalMetric.count,
+            target: 30,
+            unit: 'حديث',
+            start: Day(2026, 11, 1),
+            entries: [GoalEntry(Day(2026, 11, 2), 1)],
+          ),
+        ],
       );
       final json = repo.exportJson(data);
       final parsed = Repository.parseBackup(json);
@@ -92,6 +103,8 @@ void main() {
       expect(back.profile!.name, 'عمر');
       expect(back.rules.single.config, isA<PrayersConfig>());
       expect(back.logs.length, 1);
+      expect(back.goals.single.unit, 'حديث');
+      expect(back.goals.single.entries.single.value, 1);
       expect(
         () => Repository.parseBackup({'app': 'other'}),
         throwsFormatException,
