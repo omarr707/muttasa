@@ -221,6 +221,11 @@ ThemeData buildTheme(Brightness b) {
           titleLarge: T.screenTitle.copyWith(color: c.ink),
           labelLarge: T.section.copyWith(color: c.ink),
         ),
+    // زر الرجوع يشير لليسار مثل باقي أسهم التطبيق (طلب المستخدم).
+    // arrow_forward تنعكس في العربي فتظهر «←».
+    actionIconTheme: ActionIconThemeData(
+      backButtonIconBuilder: (_) => const Icon(Icons.arrow_forward),
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: c.page,
       foregroundColor: c.ink,
@@ -268,7 +273,12 @@ ThemeData buildTheme(Brightness b) {
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: c.card,
       selectedColor: c.accentSoft,
-      side: BorderSide(color: c.line),
+      // المختار بحد بلون التمييز، فيبان في الوضع الداكن.
+      side: WidgetStateBorderSide.resolveWith(
+        (s) => BorderSide(
+          color: s.contains(WidgetState.selected) ? c.accent : c.line,
+        ),
+      ),
       labelStyle: T.label.copyWith(color: c.ink, fontSize: 13),
       shape: const StadiumBorder(),
       checkmarkColor: c.accent,

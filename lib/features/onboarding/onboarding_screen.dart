@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:schedule_core/schedule_core.dart';
@@ -76,8 +77,12 @@ const _interests = [
     [],
     'اتصال ورسالة',
   ),
-  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, [], 'وقت ثابت للنوم'),
-  _Interest('save', 'الادخار', Icons.savings_outlined, [], 'يوم الراتب'),
+  _Interest('sleep', 'نوم مبكر', Icons.bedtime_outlined, [
+    'habit:winddown',
+  ], 'تجهيز قبل النوم'),
+  _Interest('save', 'الادخار', Icons.savings_outlined, [
+    'savings',
+  ], 'يوم الراتب'),
 ];
 
 enum _Work { none, fixed, shifts }
@@ -108,6 +113,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _remind = true;
   bool _generating = false;
 
+  // «مين تبغى تتواصل معه؟»: أسماء فقط، والتطبيق يوزّع.
+  final _people = <Person>[];
+  final _personName = TextEditingController();
+  String? _personPhone;
+  Relation _personRelation = Relation.family;
+  ContactLevel _level = ContactLevel.mid;
+
+  bool get _wantsPeople => _picked.contains('people');
+
   bool get _islam {
     // مفعّل افتراضيًا في الدول المضمّنة، ويُطفأ من الإعدادات ‹ الأقسام.
     return true;
@@ -130,6 +144,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void dispose() {
     _pages.dispose();
     _search.dispose();
+    _personName.dispose();
     super.dispose();
   }
 
@@ -163,10 +178,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         children: [
                           IconButton(
                             tooltip: 'رجوع',
-                            onPressed: () => _go(_step - 1),
+                            onPressed: () => _go(
+                              _step == 5 && !_wantsPeople ? 3 : _step - 1,
+                            ),
                             icon: const Icon(Icons.arrow_forward, size: 20),
                           ),
-                          for (var i = 1; i <= 4; i++)
+                          for (var i = 1; i <= 5; i++)
                             Expanded(
                               child: Container(
                                 height: 3,
@@ -180,13 +197,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                               ),
                             ),
                           const SizedBox(width: 8),
-                          if (_step < 4)
+                          if (_step < 5)
                             TextButton(
                               style: TextButton.styleFrom(
                                 foregroundColor: c.muted,
                                 textStyle: T.label,
                               ),
-                              onPressed: () => _go(_step + 1),
+                              onPressed: () => _go(
+                                _step == 3 && !_wantsPeople ? 5 : _step + 1,
+                              ),
                               child: const Text('تخطَّ'),
                             )
                           else
@@ -203,6 +222,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         _cityStep(),
                         _dayStep(),
                         _interestsStep(),
+                        _peopleStep(),
                         _summaryStep(),
                       ],
                     ),
@@ -549,7 +569,114 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ),
       ),
       next: 'التالي',
-      onNext: () => _go(4),
+      onNext: () => _go(_wantsPeople ? 4 : 5),
+    );
+  }
+
+  Future<void> _pickPersonFromPhone() async {
+    try {
+      final picked = await FlutterNativeContactPicker().selectPhoneNumber();
+      if (picked == null || !mounted) return;
+      final phone =
+          picked.selectedPhoneNumber ??
+          ((picked.phoneNumbers?.isNotEmpty ?? false)
+              ? picked.phoneNumbers!.first
+              : null);
+      setState(() {
+        _personName.text = (picked.fullName ?? '').trim();
+        _personPhone = phone?.replaceAll(RegExp(r'[^0-9+ ]'), '').trim();
+      });
+    } catch (_) {
+      if (mounted) toast(context, 'ما قدرنا نفتح جهات الاتصال، اكتب الاسم');
+    }
+  }
+
+  void _addPerson() {
+    final name = _personName.text.trim();
+    if (name.isEmpty) return;
+    final (freq, method) = relationDefaults(_personRelation);
+    setState(() {
+      _people.add(
+        Person(
+          id: newId(),
+          name: name,
+          phone: _personPhone,
+          relation: _personRelation,
+          freq: freq,
+          method: method,
+          addedAt: Day.fromDateTime(DateTime.now()),
+        ),
+      );
+      _personName.clear();
+      _personPhone = null;
+    });
+  }
+
+  Widget _peopleStep() {
+    final c = context.c;
+    return _page(
+      title: 'مين تبغى تتواصل معه؟',
+      subtitle:
+          'أضف الأسماء مرة وحدة، والتطبيق يقترح اتصال أو رسالة أو زيارة حسب العلاقة، ويوزّعهم على أسابيعك.',
+      children: [
+        PillButton(
+          label: 'اختر من جهات الاتصال',
+          icon: Icons.contacts_outlined,
+          soft: true,
+          expand: true,
+          onPressed: _pickPersonFromPhone,
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _personName,
+          onSubmitted: (_) => _addPerson(),
+          decoration: const InputDecoration(
+            hintText: 'أو اكتب الاسم، مثل: أمي',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Segmented<Relation>(
+          values: Relation.values,
+          labels: [for (final r in Relation.values) r.label],
+          selected: _personRelation,
+          onChanged: (r) => setState(() => _personRelation = r),
+        ),
+        const SizedBox(height: 10),
+        PillButton(
+          label: 'أضف للقائمة',
+          icon: Icons.person_add_alt,
+          expand: true,
+          onPressed: _addPerson,
+        ),
+        if (_people.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final p in _people)
+                InputChip(
+                  label: Text('${p.name} · ${p.relation.label}'),
+                  onDeleted: () => setState(() => _people.remove(p)),
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 18),
+        Text(
+          'كم مرة في الأسبوع نقترح؟',
+          style: T.label.copyWith(color: c.muted),
+        ),
+        const SizedBox(height: 8),
+        Segmented<ContactLevel>(
+          values: const [ContactLevel.low, ContactLevel.mid, ContactLevel.high],
+          labels: const ['قليل · 1', 'متوسط · 3', 'كثير · 5'],
+          selected: _level,
+          onChanged: (v) => setState(() => _level = v),
+        ),
+      ],
+      next: _people.isEmpty ? 'أضيفهم بعدين' : 'التالي',
+      onNext: () => _go(5),
     );
   }
 
@@ -578,7 +705,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 ((p.end - p.start) % minutesPerDay) -
                 (p.hasBreak ? p.breakEnd! - p.breakStart! : 0),
           );
-    final people = _picked.contains('people') || _picked.contains('family');
+    final people = _wantsPeople;
     return _page(
       title: 'جدولك جاهز',
       subtitle: 'هذا ملخص يومك المعتاد. كل شيء قابل للتعديل.',
@@ -608,8 +735,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             if (people)
               SettingsRow(
                 icon: Icons.forum_outlined,
-                title: '${nums(3)} اقتراحات تواصل أسبوعيًا',
-                subtitle: 'تضيف الأسماء من الإعدادات › التواصل',
+                title: '${nums(_level.perWeek)} اقتراحات تواصل أسبوعيًا',
+                subtitle: _people.isEmpty
+                    ? 'تضيف الأسماء من الإعدادات › التواصل'
+                    : _people.map((p) => p.name).join('، '),
               ),
           ],
         ),
@@ -660,7 +789,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (work != null)
         Rule(id: newId(), key: 'work', validFrom: today, config: work),
     ];
-    final people = _picked.contains('people') || _picked.contains('family');
+    final people = _wantsPeople;
+    final family = _picked.contains('family');
     await Future<void>.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
     if (_remind) {
@@ -675,12 +805,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         .completeOnboarding(
           profile,
           rules,
-          contacts: ContactsConfig(enabled: people),
+          contacts: ContactsConfig(enabled: people, level: _level).withOuting(
+            defaultOutings
+                .firstWhere((o) => o.kind == OutingKind.family)
+                .copyWith(enabled: family),
+          ),
           settings: ref
               .read(appDataProvider)
               .settings
               .copyWith(eveningReview: true),
         );
+    final ctrl = ref.read(appDataProvider.notifier);
+    for (final p in _people) {
+      await ctrl.savePerson(p);
+    }
     if (mounted) context.go('/day');
   }
 }

@@ -54,6 +54,9 @@ bool shouldShowFriday(WidgetRef ref, Day date) {
   if (date != today || date.weekday != DateTime.friday) return false;
   if (data.profile?.islam != true || !data.settings.fridaySheet) return false;
   if (data.meta['friday.seen'] == date.key) return false;
+  // الورقة تفيد قبل الصلاة فقط؛ بعدها تبقى البطاقة في الجدول.
+  final plan = ref.read(dayPlanProvider(date));
+  if (ref.read(nowMinuteProvider) >= _jumuahStart(plan)) return false;
   return !data.oneOffs.any((o) => o.id.startsWith(_fridayPrefix(date)));
 }
 
@@ -263,7 +266,6 @@ class FridayCard extends ConsumerWidget {
         .where((i) => i.status == ItemStatus.pending && i.end > now)
         .firstOrNull;
     return Container(
-      margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
         color: c.card,
         borderRadius: BorderRadius.circular(R.lg),

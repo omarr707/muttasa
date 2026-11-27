@@ -301,11 +301,14 @@ void main() {
     bool friday = false,
     AppData? data,
     FixedClock Function()? clock,
+    double textScale = 1,
   }) async {
     tester.view.physicalSize = const Size(390 * 2, 844 * 2);
     tester.view.devicePixelRatio = 2;
     tester.platformDispatcher.platformBrightnessTestValue = brightness;
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
     final repo = Repository(AppDatabase.memory(), 'test');
     await tester.pumpWidget(
       ProviderScope(
@@ -456,6 +459,63 @@ void main() {
     find.byType(MaterialApp),
     matchesGoldenFile('goldens/$name.png'),
   );
+
+  testWidgets('ساعات: شبكة اليوم', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text('ساعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid2');
+  });
+
+  testWidgets('ساعات داكن', (tester) async {
+    await pumpApp(tester, brightness: Brightness.dark);
+    await tester.tap(find.text('ساعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'hour_grid_dark');
+  });
+
+  testWidgets('الطلعات والإعدادات داكن', (tester) async {
+    await pumpApp(tester, brightness: Brightness.dark);
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_dark');
+    await tester.ensureVisible(find.text('الطلعات'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الطلعات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'outings_dark');
+    await tester.tap(find.text('طلعة العائلة').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'outings_family_dark');
+  });
+
+  testWidgets('خط كبير', (tester) async {
+    await pumpApp(tester, textScale: 1.3);
+    await shot(tester, 'day_large');
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    await shot(tester, 'day_large2');
+    await tester.tap(find.text('الإعدادات'));
+    await tester.pumpAndSettle();
+    await shot(tester, 'settings_large');
+  });
+
+  testWidgets('رسالة: القوالب', (tester) async {
+    await pumpApp(tester);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -620));
+    await tester.pumpAndSettle();
+    final btn = find.text('هنّئ');
+    await tester.ensureVisible(btn.first);
+    await tester.pumpAndSettle();
+    await tester.tap(btn.first);
+    await tester.pumpAndSettle();
+    await shot(tester, 'message_sheet');
+  });
 
   testWidgets('الأهداف والتقرير والادخار', (tester) async {
     await pumpApp(tester);

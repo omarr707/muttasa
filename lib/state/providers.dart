@@ -234,6 +234,24 @@ class AppController extends Notifier<AppData> {
         clearTimer: true,
       ),
     );
+    // الطلعة مع أشخاص تُحسب تواصلًا معهم.
+    if (i.key.startsWith('outing:')) {
+      final kind = OutingKind.values.byName(i.key.substring(7));
+      for (final pid in state.contacts.outing(kind).people) {
+        final key = 'contact:$pid';
+        if (state.logs[recordKey(d, key)]?.status == ItemStatus.done) continue;
+        await _putLog(
+          ItemLog(
+            date: d,
+            itemKey: key,
+            status: ItemStatus.done,
+            doneAt: when,
+            category: 'contacts',
+            title: i.title,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> setStatus(Day d, PlanItem i, ItemStatus s) => _putLog(

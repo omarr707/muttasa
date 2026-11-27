@@ -12,6 +12,7 @@ import '../../state/providers.dart';
 import '../goals/amount_sheet.dart';
 import 'breathe_sheet.dart';
 import 'item_sheet.dart';
+import 'message_sheet.dart';
 import 'water_sheet.dart';
 
 /// بطاقة المهمة من دليل التصميم: مربع أيقونة، عنوان بسطر، وصف بسطر، وإجراء واحد.
@@ -80,7 +81,26 @@ class ItemCard extends ConsumerWidget {
       }
     }
 
+    // الطلعات: مقترحة ← مجدولة ← تمّت.
+    final outing = i.key.startsWith('outing:');
+    final stageKey = 'stage:${date.key}:${i.key}';
+    final outingCfg = outing
+        ? ref.watch(
+            appDataProvider.select(
+              (d) => d.contacts.outing(
+                OutingKind.values.byName(i.key.substring(7)),
+              ),
+            ),
+          )
+        : null;
+    final scheduled =
+        !outing ||
+        !outingCfg!.suggested ||
+        ref.watch(
+          appDataProvider.select((d) => d.meta[stageKey] == 'scheduled'),
+        );
     final meta = <String>[
+      if (outing && !done && !off) scheduled ? 'مجدولة' : 'مقترحة',
       fmtRange(i.start, i.end % minutesPerDay),
       if (off) statusLabel(i, isToday: isToday, now: now),
       if (!off && i.subtitle != null && i.subtitle!.isNotEmpty && !_isDraft(i))
@@ -101,7 +121,18 @@ class ItemCard extends ConsumerWidget {
         (done || !upcoming || !i.fixed);
     final contact =
         i.kind == ItemKind.contact && i.icon != 'gift' && i.icon != 'visit';
-    if (contact && !done && !isFuture && !off) {
+    if (outing && !scheduled && !done && !off) {
+      action = SmallButton(
+        label: 'ثبّتها',
+        primary: true,
+        onTap: () async {
+          await ctrl.setMeta(stageKey, 'scheduled');
+          if (context.mounted) {
+            toast(context, 'ثبّتنا ${i.title} ${fmtTime(i.start)}');
+          }
+        },
+      );
+    } else if (contact && !done && !isFuture && !off) {
       final person = ref
           .watch(appDataProvider.select((d) => d.people))
           .where((p) => p.id == i.personId)
@@ -111,6 +142,7 @@ class ItemCard extends ConsumerWidget {
         label: call ? 'اتصل' : 'أرسل',
         primary: true,
         onTap: () async {
+          if (!call) return showMessageSheet(context, ref, i, date);
           final ok =
               person != null &&
               await openContact(
@@ -130,6 +162,17 @@ class ItemCard extends ConsumerWidget {
             onAction: () => ctrl.markDone(date, i),
           );
         },
+      );
+    } else if (i.kind == ItemKind.contact &&
+        i.icon == 'gift' &&
+        i.personId != null &&
+        !done &&
+        !isFuture &&
+        !off) {
+      action = SmallButton(
+        label: 'هنّئ',
+        primary: true,
+        onTap: () => showMessageSheet(context, ref, i, date),
       );
     } else if (i.kind == ItemKind.savings && !done && !isFuture && !off) {
       action = SmallButton(

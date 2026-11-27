@@ -146,8 +146,11 @@ class _AddForm extends ConsumerStatefulWidget {
 class _AddFormState extends ConsumerState<_AddForm> {
   final _title = TextEditingController();
   late Day _date = widget.date;
+  // المهمة والجلسة والتواصل مرنة افتراضيًا: نلقى لها وقتًا فاضيًا بدل التعارض.
   late bool _timed =
-      widget.kind != OneOffKind.task && widget.kind != OneOffKind.habitSession;
+      widget.kind != OneOffKind.task &&
+      widget.kind != OneOffKind.habitSession &&
+      widget.kind != OneOffKind.contact;
   int _start = 17 * 60;
   int _duration = 30;
   Window _window = Window.any;
@@ -159,6 +162,10 @@ class _AddFormState extends ConsumerState<_AddForm> {
 
   // البطاقة الأب (اختياري).
   PlanItem? _parent;
+
+  // المناسبة: تذكير بالتهنئة قبلها.
+  bool _congrats = false;
+  Person? _congratsPerson;
 
   static const _methods = ['call', 'message', 'visit'];
   static const _methodLabels = {
@@ -419,6 +426,35 @@ class _AddFormState extends ConsumerState<_AddForm> {
                 ),
               ),
             ],
+            if (widget.kind == OneOffKind.event) ...[
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('ذكّرني أهنّئ'),
+                subtitle: const Text(
+                  'رسالة تهنئة قبل المناسبة بساعة، تظهر داخل بطاقتها',
+                ),
+                value: _congrats,
+                onChanged: (v) => setState(() => _congrats = v),
+              ),
+              if (_congrats && people.isNotEmpty) ...[
+                const FieldLabel('لمين التهنئة؟ (اختياري)'),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final p in people)
+                      ChoiceChip(
+                        label: Text(p.name),
+                        selected: _congratsPerson?.id == p.id,
+                        showCheckmark: false,
+                        onSelected: (on) =>
+                            setState(() => _congratsPerson = on ? p : null),
+                      ),
+                  ],
+                ),
+              ],
+            ],
             if (widget.kind == OneOffKind.period ||
                 widget.kind == OneOffKind.event)
               Padding(
@@ -480,11 +516,55 @@ class _AddFormState extends ConsumerState<_AddForm> {
       parent: _parent?.key,
     );
     final ctrl = ref.read(appDataProvider.notifier);
+    if (isContact &&
+        ref
+            .read(appDataProvider)
+            .oneOffs
+            .any(
+              (x) =>
+                  x.kind == OneOffKind.contact &&
+                  x.personId == p!.id &&
+                  x.date == _date,
+            )) {
+      toast(context, 'فيه تواصل مع ${p!.name} في هذا اليوم من قبل');
+      return;
+    }
     await ctrl.addOneOff(o);
+    if (widget.kind == OneOffKind.event && _congrats) {
+      final cp = _congratsPerson;
+      final at = (_start - 60).clamp(0, minutesPerDay - 5);
+      await ctrl.addOneOff(
+        OneOff(
+          id: newId(),
+          kind: cp == null ? OneOffKind.reminder : OneOffKind.contact,
+          title: cp == null ? 'هنّئ: $title' : 'هنّئ ${cp.name}',
+          date: _date,
+          start: at,
+          duration: 5,
+          icon: cp == null ? 'gift' : 'message',
+          personId: cp?.id,
+          note: cp == null ? null : contactDraft(cp, at),
+          parent: o.itemKey,
+        ),
+      );
+    }
+    if (!mounted) return;
+    var plan = ref.read(dayPlanProvider(_date));
+    var placed = plan.byKey(o.itemKey);
+    if (placed != null && timed && _parent == null) {
+      final moves = await askReflow(context, plan, placed, placed.start);
+      if (!mounted) return;
+      if (moves == null) {
+        await ctrl.deleteOneOff(o.id);
+        return;
+      }
+      if (moves.isNotEmpty) await ctrl.applyRearrange(_date, moves);
+      if (!mounted) return;
+      plan = ref.read(dayPlanProvider(_date));
+      placed = plan.byKey(o.itemKey);
+    }
     if (!mounted) return;
     Navigator.pop(context);
-    final plan = ref.read(dayPlanProvider(_date));
-    final placed = plan.byKey(o.itemKey);
     if (widget.kind == OneOffKind.reminder) {
       toast(context, 'انضاف التذكير ${fmtTime(_start)}');
     } else if (placed != null) {

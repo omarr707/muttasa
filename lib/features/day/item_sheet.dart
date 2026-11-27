@@ -182,7 +182,7 @@ Future<void> showItemSheet(
                   bottom: 8,
                 ),
                 child: Text(
-                  '${fmtDayLong(date)} · ${fmtRange(i.start, i.end % minutesPerDay)}'
+                  '${fmtDayLong(date)} · ${fmtRangeLong(i.start, i.end % minutesPerDay)}'
                   '${i.doneAt != null ? ' · نفّذتها ${fmtTime(i.doneAt!)}' : ''}',
                   style: TextStyle(color: c.ink2, fontSize: 12.5),
                 ),
@@ -388,15 +388,32 @@ Future<void> moveItemFlow(
   PlanItem i,
   Day date,
 ) async {
-  final ctrl = ref.read(appDataProvider.notifier);
-  var t = await pickTime(
+  final t = await pickTime(
     context,
     initial: i.start,
     title: 'انقل «${i.title}» إلى',
   );
   if (t == null || !context.mounted) return;
+  await moveItemTo(context, ref, i, date, t);
+}
+
+/// ينقل العنصر إلى [target]: يفحص الثابت، ويسأل «نزحزح اللي بعده؟»،
+/// ثم «هذه المرة فقط» أو «من اليوم فصاعدًا» للمتكرر.
+Future<void> moveItemTo(
+  BuildContext context,
+  WidgetRef ref,
+  PlanItem i,
+  Day date,
+  int target,
+) async {
+  final ctrl = ref.read(appDataProvider.notifier);
+  int? t = target;
   final plan = ref.read(dayPlanProvider(date));
-  final check = checkMove(plan, i, t);
+  final soft = {
+    for (final x in plan.items)
+      if (isMovable(x)) x.key,
+  };
+  final check = checkMove(plan, i, t, soft: soft);
   if (!check.ok) {
     final accept = await showDialog<bool>(
       context: context,
@@ -421,6 +438,10 @@ Future<void> moveItemFlow(
     if (accept != true) return;
     t = check.suggestion!;
   }
+  if (!context.mounted) return;
+  final reflow = await askReflow(context, plan, i, t);
+  if (reflow == null || !context.mounted) return;
+  if (reflow.isNotEmpty) await ctrl.applyRearrange(date, reflow);
   if (!context.mounted) return;
   final recurring =
       i.ruleKey != null &&
@@ -463,6 +484,74 @@ Future<void> moveItemFlow(
   );
   if (scope == 'once') await ctrl.moveOnce(date, i, t);
   if (scope == 'forward') await ctrl.moveFromToday(date, i, t);
+}
+
+/// «نزحزح اللي بعده؟»: إذا الوقت الجديد يتداخل مع عناصر قابلة للتحريك.
+/// يرجع null للإلغاء، أو خريطة النقلات (فارغة = خلّها متداخلة أو ما فيه تداخل).
+Future<Map<String, int>?> askReflow(
+  BuildContext context,
+  DayPlan plan,
+  PlanItem item,
+  int start,
+) async {
+  final r = reflowAfter(plan, item, start);
+  if (!r.needed) return const {};
+  final names = r.overlapped.map((x) => '«${x.title}»').take(3).join('، ');
+  final choice = await showModalBottomSheet<String>(
+    useRootNavigator: true,
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SheetHeader('نزحزح اللي بعده؟'),
+            Text(
+              '«${item.title}» ${fmtTime(start)} تتداخل مع $names.',
+              style: T.body.copyWith(color: ctx.c.ink2),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.low_priority),
+              title: const Text('زحزح اللي بعدها'),
+              subtitle: Text(
+                r.moves.isEmpty
+                    ? 'ما فيه مكان قبل النوم، تبقى كما هي'
+                    : r.moves.entries
+                          .take(3)
+                          .map(
+                            (e) =>
+                                '${plan.byKey(e.key)?.title ?? ''} ← ${fmtTime(e.value)}',
+                          )
+                          .join('\n'),
+              ),
+              onTap: () => Navigator.pop(ctx, 'reflow'),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.layers_outlined),
+              title: const Text('خلّها متداخلة'),
+              onTap: () => Navigator.pop(ctx, 'keep'),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.close),
+              title: const Text('إلغاء'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  return switch (choice) {
+    'reflow' => r.moves,
+    'keep' => const {},
+    _ => null,
+  };
 }
 
 /// «سجّل تقدمي»: نطاق الصفحات. الصفحات تُحسب للهدف حتى لو الجلسة جزئية.

@@ -188,6 +188,21 @@ final libraryEntries = <LibraryEntry>[
     ),
   ),
   LibraryEntry(
+    key: 'habit:winddown',
+    title: 'استعد للنوم',
+    description: 'كل يوم · 15 دقيقة قبل النوم: بدون جوال',
+    icon: 'sleep',
+    build: () => const FlexConfig(
+      kind: RuleKind.habit,
+      title: 'استعد للنوم',
+      subtitle: 'طفّ الشاشات وجهّز نفسك',
+      icon: 'sleep',
+      duration: 15,
+      windows: [Window.night],
+      preferred: 22 * 60,
+    ),
+  ),
+  LibraryEntry(
     key: 'reminders',
     title: 'تذكيرات قصيرة',
     description: 'الماء مع الوجبات والاستراحة · الوقوف · التنفّس',

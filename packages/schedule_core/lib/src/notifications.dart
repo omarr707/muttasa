@@ -16,6 +16,7 @@ class PlannedNotification {
     required this.title,
     required this.body,
     this.actionable = false,
+    this.contact = false,
   });
 
   /// مشتق من (date, itemKey)، فالتحديث يستبدل ولا يكرّر.
@@ -31,6 +32,9 @@ class PlannedNotification {
 
   /// أزرار «تمت» و«أجّل ساعة» داخل التنبيه.
   final bool actionable;
+
+  /// تواصل مع شخص: يضيف زر «اتصل».
+  final bool contact;
 
   DateTime get when =>
       DateTime(date.year, date.month, date.day).add(Duration(minutes: minute));
@@ -124,11 +128,12 @@ NotificationPlan planNotifications(
         title: kind == NotifyKind.prayer
             ? i.title
             : (s.leadMinutes > 0
-                  ? 'بعد ${s.leadMinutes} دقائق: ${i.title}'
+                  ? 'بعد ${fmtDuration(s.leadMinutes)}: ${i.title}'
                   : i.title),
         body: body,
         actionable:
             i.track == TrackMode.confirm || i.track == TrackMode.autocount,
+        contact: i.kind == ItemKind.contact && i.personId != null,
       ),
     );
   }

@@ -13,6 +13,7 @@ import 'breathe_sheet.dart';
 import 'friday_sheet.dart';
 import 'season_card.dart';
 import 'item_card.dart';
+import 'hour_grid.dart';
 import 'item_sheet.dart';
 import 'missed_sheet.dart';
 import 'stats_view.dart';
@@ -34,6 +35,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
   _Tab _tab = _Tab.timeline;
   _Filter _filter = _Filter.all;
   bool _showPast = false;
+  bool _grid = false;
 
   @override
   void initState() {
@@ -51,12 +53,10 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     final date = ref.watch(selectedDayProvider);
     final today = ref.watch(todayProvider);
     final plan = ref.watch(dayPlanProvider(date));
-    final todayPlan = ref.watch(dayPlanProvider(today));
     final engine = ref.watch(engineProvider);
     final profile = ref.watch(appDataProvider.select((d) => d.profile))!;
     final settings = ref.watch(appDataProvider.select((d) => d.settings));
     final now = ref.watch(nowMinuteProvider);
-    final todayProgress = dayProgress(todayPlan);
     final isToday = date == today;
     final missed = isToday ? missedToday(plan, now) : const <PlanItem>[];
 
@@ -138,18 +138,6 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                                     ),
                                   ),
                                 ),
-                              ] else ...[
-                                const SizedBox(width: 8),
-                                TextButton(
-                                  style: TextButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    textStyle: T.micro,
-                                  ),
-                                  onPressed: () => ref
-                                      .read(selectedDayProvider.notifier)
-                                      .set(today),
-                                  child: const Text('ارجع لليوم'),
-                                ),
                               ],
                             ],
                           ),
@@ -163,12 +151,18 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                       ),
                     ),
                     _MiniRing(
-                      progress: todayProgress,
+                      progress: dayProgress(plan),
+                      label: isToday
+                          ? 'إنجازك'
+                          : 'إنجاز ${arabicWeekdays[date.weekday]}',
                       onTap: () => setState(() => _tab = _Tab.stats),
                     ),
                   ],
                 ),
               ),
+            ),
+            SliverToBoxAdapter(
+              child: _DayNav(date: date, today: today),
             ),
             SliverToBoxAdapter(
               child: _WeekStrip(selected: date, engine: engine, today: today),
@@ -190,6 +184,22 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                       ),
                       const Spacer(),
                       if (_tab == _Tab.timeline)
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: _grid ? c.accent : c.ink2,
+                            textStyle: T.label.copyWith(fontSize: 12.5),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () => setState(() => _grid = !_grid),
+                          icon: Icon(
+                            _grid
+                                ? Icons.view_agenda_outlined
+                                : Icons.grid_view,
+                            size: 18,
+                          ),
+                          label: Text(_grid ? 'قائمة' : 'ساعات'),
+                        ),
+                      if (_tab == _Tab.timeline && !_grid)
                         TextButton.icon(
                           style: TextButton.styleFrom(
                             foregroundColor: c.ink2,
@@ -222,7 +232,6 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                     children: [
                       if (!date.isAfter(today))
                         _HabitChips(date: date, plan: plan),
-                      FridayCard(date: date, plan: plan),
                       SeasonCards(date: date, plan: plan),
                       if (missed.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -242,12 +251,17 @@ class _DayScreenState extends ConsumerState<DayScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 16, 8),
-                sliver: SliverList.list(
-                  children: _timeline(context, plan, date, today, settings),
+              if (_grid)
+                SliverToBoxAdapter(
+                  child: HourGrid(date: date, plan: plan),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 16, 8),
+                  sliver: SliverList.list(
+                    children: _timeline(context, plan, date, today, settings),
+                  ),
                 ),
-              ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
@@ -309,11 +323,30 @@ class _DayScreenState extends ConsumerState<DayScreen> {
         .where((i) => !missedKeys.contains(i.key))
         .where((i) => !nestedKeys.contains(i.key) && !isFridayChild(i.key))
         .toList();
+    // الماء يعيش في شريحته فوق، وفي الجدول نعرض تذكيره الجاي فقط.
+    final nextWater = isToday
+        ? plan.lines
+              .where(
+                (l) => l.kind == LineKind.water && !l.done && l.minute >= now,
+              )
+              .firstOrNull
+        : null;
     final lines = _filter == _Filter.all && settings.showLines
-        ? plan.lines.where((l) => l.kind != LineKind.sleep).toList()
+        ? plan.lines
+              .where((l) => l.kind != LineKind.sleep)
+              .where((l) => l.kind != LineKind.water || l == nextWater)
+              .toList()
         : <ReminderLine>[];
+    // أعمال الجمعة: بطاقة أب واحدة في مكانها من الجدول.
+    final fridayItems = plan.items.where((i) => isFridayChild(i.key)).toList();
+    final fridayGroup = _filter == _Filter.all && fridayItems.isNotEmpty
+        ? _FridayGroup(
+            fridayItems.map((i) => i.start).reduce((a, b) => a < b ? a : b),
+            fridayItems.map((i) => i.end).reduce((a, b) => a > b ? a : b),
+          )
+        : null;
 
-    if (items.isEmpty && lines.isEmpty) {
+    if (items.isEmpty && lines.isEmpty && fridayGroup == null) {
       return [
         Padding(
           padding: const EdgeInsets.all(24),
@@ -334,10 +367,39 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     final entries = <(int, Object)>[
       for (final i in items) (i.start, i),
       for (final l in lines) (l.minute, l),
+      if (fridayGroup != null) (fridayGroup.start, fridayGroup),
     ]..sort((a, b) => a.$1.compareTo(b.$1));
 
     Widget row(Object e, {int? hourOf}) {
       final hourLabel = hourOf == null ? '' : fmtHour(hourOf);
+      if (e is _FridayGroup) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 38,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    hourLabel,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: T.micro.copyWith(
+                      color: c.muted,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: FridayCard(date: date, plan: plan),
+              ),
+            ],
+          ),
+        );
+      }
       final child = e is PlanItem
           ? ItemCard(
               item: e,
@@ -389,6 +451,7 @@ class _DayScreenState extends ConsumerState<DayScreen> {
     bool isPast((int, Object) e) {
       final o = e.$2;
       if (o is PlanItem) return o.end <= now;
+      if (o is _FridayGroup) return o.end <= now;
       return (o as ReminderLine).minute < now;
     }
 
@@ -579,8 +642,9 @@ class _HabitChips extends ConsumerWidget {
 }
 
 class _MiniRing extends StatelessWidget {
-  const _MiniRing({required this.progress, this.onTap});
+  const _MiniRing({required this.progress, required this.label, this.onTap});
   final Progress progress;
+  final String label;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
@@ -588,7 +652,7 @@ class _MiniRing extends StatelessWidget {
     final full = progress.total > 0 && progress.done >= progress.total;
     return Semantics(
       button: true,
-      label: 'إنجاز اليوم ${progress.done} من ${progress.total}',
+      label: '$label ${progress.done} من ${progress.total}',
       excludeSemantics: true,
       child: GestureDetector(
         onTap: onTap,
@@ -619,7 +683,7 @@ class _MiniRing extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              'إنجازك',
+              label,
               style: T.micro.copyWith(
                 fontSize: 10,
                 color: c.muted,
@@ -812,15 +876,27 @@ class _Banners extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final banners = <Widget>[];
-    for (final cf in plan.conflicts) {
+    final conflicts = plan.conflicts;
+    if (conflicts.length == 1) {
+      final cf = conflicts.single;
       final target = cf.a.kind == ItemKind.work ? cf.b : cf.a;
       banners.add(
         _Banner(
           icon: Icons.warning_amber_rounded,
-          title: 'تعارض بين «${cf.a.title}» و«${cf.b.title}»',
-          body: 'ما نحرّك الثابت. عدّل هذا أو ذاك.',
+          title: '«${cf.a.title}» و«${cf.b.title}» متداخلين',
+          body: '${fmtRange(target.start, target.end)} · عدّل واحد منهم.',
           action: 'عدّل',
           onTap: () => showItemSheet(context, ref, target, date),
+        ),
+      );
+    } else if (conflicts.length > 1) {
+      banners.add(
+        _Banner(
+          icon: Icons.warning_amber_rounded,
+          title: '${nums(conflicts.length)} تعارضات في هذا اليوم',
+          body: 'مواعيد متداخلة. رتّبها مرة وحدة.',
+          action: 'رتّبها',
+          onTap: () => _showConflicts(context, ref, date),
         ),
       );
     }
@@ -858,6 +934,133 @@ class _Banners extends ConsumerWidget {
   }
 }
 
+/// قائمة التعارضات: كل زوج بسطر، وزر يعدّل غير الثابت منهما.
+Future<void> _showConflicts(
+  BuildContext context,
+  WidgetRef ref,
+  Day date,
+) => showModalBottomSheet<void>(
+  useRootNavigator: true,
+  context: context,
+  isScrollControlled: true,
+  builder: (ctx) => Consumer(
+    builder: (ctx, ref, _) {
+      final c = ctx.c;
+      final plan = ref.watch(dayPlanProvider(date));
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * .7,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              const SheetHeader('التعارضات'),
+              if (plan.conflicts.isEmpty)
+                Text('ما فيه تعارض الحين ✓', style: TextStyle(color: c.good)),
+              for (final cf in plan.conflicts)
+                Builder(
+                  builder: (_) {
+                    final target = isMovable(cf.b) ? cf.b : cf.a;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${cf.a.title} · ${cf.b.title}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: T.cardTitle.copyWith(fontSize: 14),
+                                ),
+                                Text(
+                                  '${fmtRange(cf.a.start, cf.a.end)} و${fmtRange(cf.b.start, cf.b.end)}',
+                                  style: T.meta.copyWith(color: c.muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          SmallButton(
+                            label: 'انقل',
+                            onTap: () => moveItemFlow(ctx, ref, target, date),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  ),
+);
+
+class _FridayGroup {
+  const _FridayGroup(this.start, this.end);
+  final int start;
+  final int end;
+}
+
+/// السابق والتالي، وزر «اليوم» يرجعك لتاريخ اليوم من أي يوم.
+class _DayNav extends ConsumerWidget {
+  const _DayNav({required this.date, required this.today});
+  final Day date;
+  final Day today;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.c;
+    final set = ref.read(selectedDayProvider.notifier).set;
+    final ws = date.weekStart;
+    final we = ws.add(6);
+    final range = ws.month == we.month
+        ? '${nums(ws.day)} – ${nums(we.day)} ${arabicMonths[we.month - 1]}'
+        : '${fmtDayShort(ws)} – ${fmtDayShort(we)}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'اليوم السابق',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => set(date.prev),
+            // تنعكس في العربي فتشير لليمين: السابق في جهة البداية.
+            icon: Icon(Icons.chevron_left, color: c.ink2),
+          ),
+          Expanded(
+            child: Text(
+              range,
+              textAlign: TextAlign.center,
+              style: T.label.copyWith(color: c.ink2),
+            ),
+          ),
+          if (date != today)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: SmallButton(
+                label: 'اليوم',
+                icon: Icons.today_outlined,
+                primary: true,
+                onTap: () => set(today),
+              ),
+            ),
+          IconButton(
+            tooltip: 'اليوم التالي',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => set(date.next),
+            icon: Icon(Icons.chevron_right, color: c.ink2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Banner extends StatelessWidget {
   const _Banner({
     required this.icon,
@@ -892,7 +1095,7 @@ class _Banner extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: T.cardTitle.copyWith(fontSize: 14),
                 ),

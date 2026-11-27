@@ -14,6 +14,7 @@ import '../routine/labels.dart';
 import '../routine/preview.dart';
 import '../routine/rule_editors.dart';
 import 'contacts_screens.dart';
+import 'outings_screen.dart';
 import 'season_screens.dart';
 
 void pushPage(BuildContext context, Widget page) =>
@@ -119,10 +120,18 @@ class SettingsScreen extends ConsumerWidget {
                 SettingsRow(
                   icon: Icons.forum_outlined,
                   title: 'التواصل مع الناس',
-                  subtitle: contacts.enabled
-                      ? 'مفعّل · ${nums(data.people.length)} ${data.people.length > 2 && data.people.length <= 10 ? 'أشخاص' : 'شخص'} · ${nums(contacts.level.perWeek)} في الأسبوع'
-                      : 'متوقف',
+                  subtitle: !contacts.enabled
+                      ? 'متوقف'
+                      : (data.people.isEmpty
+                            ? 'مفعّل · ما أضفت أحد بعد'
+                            : 'مفعّل · ${peopleCount(data.people.length)} · ${nums(contacts.level.perWeek)} في الأسبوع'),
                   onTap: () => pushPage(context, const ContactsSettingsPage()),
+                ),
+                SettingsRow(
+                  icon: Icons.local_cafe_outlined,
+                  title: 'الطلعات',
+                  subtitle: outingsSummary(contacts),
+                  onTap: () => pushPage(context, const OutingsPage()),
                 ),
                 SettingsRow(
                   icon: Icons.auto_stories_outlined,
@@ -139,11 +148,6 @@ class SettingsScreen extends ConsumerWidget {
                   toggle: s.goalsEnabled,
                   onToggle: (v) =>
                       ctrl.updateSettings(s.copyWith(goalsEnabled: v)),
-                ),
-                const SettingsRow(
-                  icon: Icons.savings_outlined,
-                  title: 'المال',
-                  subtitle: 'قريبًا',
                 ),
               ],
             ),
@@ -194,10 +198,21 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            SettingsGroup(
+              children: [
+                SettingsRow(
+                  icon: Icons.restart_alt,
+                  title: 'إعادة ضبط التطبيق',
+                  subtitle: 'تبدأ التهيئة من جديد، وتنحذف البيانات من الجهاز',
+                  danger: true,
+                  onTap: () => confirmReset(context, ref),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             Center(
               child: Text(
-                'مُتَّسَع ${nums('0.3.0')}',
+                'مُتَّسَع ${nums('0.5.0')}',
                 style: T.micro.copyWith(color: context.c.muted),
               ),
             ),
@@ -745,36 +760,39 @@ class DataPage extends ConsumerWidget {
               title: 'ابدأ من جديد',
               subtitle: 'يحذف كل البيانات من هذا الجهاز',
               danger: true,
-              onTap: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('نحذف كل شيء؟'),
-                    content: const Text(
-                      'روتينك وسجلاتك تنحذف من هذا الجهاز. صدّر نسخة قبل إذا تبغى.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('إلغاء'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('احذف'),
-                      ),
-                    ],
-                  ),
-                );
-                if (ok == true) {
-                  await ctrl.resetAll();
-                  if (context.mounted) context.go('/onboarding');
-                }
-              },
+              onTap: () => confirmReset(context, ref),
             ),
           ],
         ),
       ],
     );
+  }
+}
+
+/// «إعادة ضبط التطبيق»: تأكيد ثم حذف كل البيانات والرجوع للتهيئة.
+Future<void> confirmReset(BuildContext context, WidgetRef ref) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('نعيد ضبط التطبيق؟'),
+      content: const Text(
+        'روتينك وسجلاتك تنحذف من هذا الجهاز وتبدأ التهيئة من أول. صدّر نسخة قبل إذا تبغى.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('أعد الضبط'),
+        ),
+      ],
+    ),
+  );
+  if (ok == true) {
+    await ref.read(appDataProvider.notifier).resetAll();
+    if (context.mounted) context.go('/onboarding');
   }
 }
 

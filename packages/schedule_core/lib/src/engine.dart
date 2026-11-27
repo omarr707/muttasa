@@ -744,6 +744,8 @@ class ScheduleEngine {
     for (final r in flexRules.where((r) => r.kind == RuleKind.habit)) {
       queue.addAll(_flexFromRule(d, r, r.config as FlexConfig, withWeekly));
     }
+    // الطلعة قبل اقتراحات التواصل: أطول وأصعب في إيجاد مكان.
+    if (withWeekly) queue.addAll(_outingFlex(d, dayWake, bed));
     if (withWeekly) queue.addAll(_contactFlex(d, pr, dayWake, bed));
     final savings = _ruleOfKind<SavingsConfig>(rules);
     if (savings != null && savings.isPayDay(d)) {
@@ -1372,8 +1374,13 @@ class ScheduleEngine {
       if (prev == null || l.date.isAfter(prev)) last[pid] = l.date;
     }
     Day lastOf(Person p) => last[p.id] ?? p.addedAt.add(-p.freq.days);
-    bool due(Person p) => !lastOf(p).add(p.freq.days).isAfter(ws.add(6));
+    // الأولوية: مناسبة خلال أسبوع، ثم الأطول بدون تواصل.
+    bool soon(Person p) => occasionSoon(p, ws, days: 6);
+    bool due(Person p) =>
+        soon(p) || !lastOf(p).add(p.freq.days).isAfter(ws.add(6));
     int byStale(Person a, Person b) {
+      final o = (soon(b) ? 1 : 0) - (soon(a) ? 1 : 0);
+      if (o != 0) return o;
       final x = lastOf(a).compareTo(lastOf(b));
       return x != 0 ? x : a.name.compareTo(b.name);
     }
@@ -1388,8 +1395,13 @@ class ScheduleEngine {
         p.method == ContactMethod.visit && c.visitsWeekendOnly;
     final visits = all.where(weekendVisit).toList();
     final chosen = all.where((p) => !weekendVisit(p)).toList();
-    final weekendDays = [
+    var allowed = [
       for (var i = 0; i < 7; i++)
+        if (!c.excludedDays.contains(ws.add(i).weekday)) i,
+    ];
+    if (allowed.isEmpty) allowed = [for (var i = 0; i < 7; i++) i];
+    final weekendDays = [
+      for (final i in allowed)
         if (_p.weekend.contains(ws.add(i).weekday)) ws.add(i),
     ];
     for (var k = 0; k < visits.length; k++) {
@@ -1399,10 +1411,56 @@ class ScheduleEngine {
       out.putIfAbsent(day, () => []).add(visits[k]);
     }
     final n = chosen.length;
+    final len = allowed.length;
     for (var k = 0; k < n; k++) {
-      // توزيع متساوٍ على الأيام السبعة، من منتصف كل حصة.
-      final idx = ((k * 7 + 3) ~/ n).clamp(0, 6) % 7;
-      out.putIfAbsent(ws.add(idx), () => []).add(chosen[k]);
+      // توزيع متساوٍ على الأيام المسموحة، من منتصف كل حصة.
+      final idx = ((k * len + len ~/ 2) ~/ n).clamp(0, len - 1);
+      out.putIfAbsent(ws.add(allowed[idx]), () => []).add(chosen[k]);
+    }
+    return out;
+  }
+
+  /// يوم الطلعة في أسبوعها: أول يوم مسموح في الأسبوع، كل [everyWeeks] أسبوع
+  /// بدءًا من أسبوع التسجيل.
+  Day? outingDay(OutingConfig o, Day anyDay) {
+    if (!o.enabled || o.days.isEmpty) return null;
+    final ws = anyDay.weekStart;
+    final weeks = ws.difference(_p.joinDay.weekStart) ~/ 7;
+    if (weeks < 0 || weeks % o.everyWeeks.clamp(1, 8) != 0) return null;
+    for (var i = 0; i < 7; i++) {
+      if (o.days.contains(ws.add(i).weekday)) return ws.add(i);
+    }
+    return null;
+  }
+
+  List<_Flex> _outingFlex(Day d, int wake, int bed) {
+    final out = <_Flex>[];
+    for (final o in input.contacts.outings) {
+      if (outingDay(o, d) != d) continue;
+      final names = [
+        for (final id in o.people)
+          ...input.people.where((p) => p.id == id).map((p) => p.name),
+      ];
+      final end = bed.clamp(0, minutesPerDay);
+      out.add(
+        _Flex(
+          key: o.itemKey,
+          kind: ItemKind.event,
+          title: o.kind.label,
+          subtitle: names.isEmpty ? null : 'مع ${names.join('، ')}',
+          icon: o.kind.icon,
+          duration: o.duration,
+          window: Window.night,
+          span: Span(
+            o.windowStart.clamp(wake, end),
+            o.windowEnd.clamp(wake, end),
+          ),
+          preferred: o.windowStart,
+          track: TrackMode.confirm,
+          category: 'outings',
+          isExtra: true,
+        ),
+      );
     }
     return out;
   }
